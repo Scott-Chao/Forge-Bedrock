@@ -117,3 +117,28 @@ class Matrix:
 
     def __abs__(self):
         return Matrix(np.abs(self.data))
+
+    def __matmul__(self, other):
+        return self.matmul(other, S=64)
+
+    def matmul(self, other, S=64):
+        assert self.cols == other.rows, (
+            "Matrix dimensions not compatible for multiplication"
+        )
+        M, K, N = self.rows, self.cols, other.cols
+        res = Matrix.zeros(M, N)
+
+        for i1 in range(0, M, S):
+            for k1 in range(0, K, S):
+                for j1 in range(0, N, S):
+                    i2 = min(i1 + S, M)
+                    k2 = min(k1 + S, K)
+                    j2 = min(j1 + S, N)
+
+                    A = self.data[i1:i2, k1:k2]
+                    B = other.data[k1:k2, j1:j2]
+                    C = res.data[i1:i2, j1:j2]
+
+                    C += A @ B
+
+        return res
