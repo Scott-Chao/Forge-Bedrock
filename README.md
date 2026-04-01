@@ -17,9 +17,9 @@ The philosophy of this project is to bridge the gap between abstract mathematica
 
 ### Phase 1: Linear Algebra
 Implement the core routines that power data transformation and dimensionality reduction.
-- [ ] **Basic Matrix Operations**
+- [x] **Basic Matrix Operations**
     - [x] High-performance Matrix Multiplication (Tiling/Block-based logic).
-    - [ ] Custom Broadcasting engine for tensor alignment.
+    - [x] Custom Broadcasting engine for tensor alignment.
 - [ ] **Systems of Equations**
     - [ ] Gaussian Elimination with partial pivoting.
     - [ ] LU Decomposition and Cholesky Decomposition (for symmetric positive-definite matrices).
