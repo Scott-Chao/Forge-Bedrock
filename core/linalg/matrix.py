@@ -142,6 +142,36 @@ class Matrix:
 
         return res
 
+    def solve(self, b):
+        if not isinstance(b, Matrix):
+            b = Matrix(b)
+
+        assert self.rows == self.cols, "Matrix must be square"
+        assert self.rows == b.rows, "Dimension mismatch between A and b"
+
+        n = self.rows
+        aug = np.hstack([self.data.copy(), b.data.copy()])
+
+        for k in range(n):
+            pivot_idx = np.argmax(np.abs(aug[k:, k])) + k
+
+            if np.abs(aug[pivot_idx, k]) < 1e-15:
+                raise ValueError("Matrix is singular or nearly singular")
+
+            if pivot_idx != k:
+                aug[[k, pivot_idx]] = aug[[pivot_idx, k]]
+
+            for i in range(k + 1, n):
+                factor = aug[i, k] / aug[k, k]
+                aug[i, k:] -= factor * aug[k, k:]
+
+        x = np.zeros((n, 1))
+        for i in range(n - 1, -1, -1):
+            sum_ax = aug[i, i + 1 : n] @ x[i + 1 : n]
+            x[i] = (aug[i, n] - sum_ax) / aug[i, i]
+
+        return Matrix(x)
+
 
 class BroadcastEngine:
     @staticmethod

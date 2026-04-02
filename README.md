@@ -21,7 +21,7 @@ Implement the core routines that power data transformation and dimensionality re
     - [x] High-performance Matrix Multiplication (Tiling/Block-based logic).
     - [x] Custom Broadcasting engine for tensor alignment.
 - [ ] **Systems of Equations**
-    - [ ] Gaussian Elimination with partial pivoting.
+    - [x] Gaussian Elimination with partial pivoting.
     - [ ] LU Decomposition and Cholesky Decomposition (for symmetric positive-definite matrices).
 - [ ] **Eigenvalues & Iterative Methods**
     - [ ] Power Iteration (finding the dominant eigenvalue).
