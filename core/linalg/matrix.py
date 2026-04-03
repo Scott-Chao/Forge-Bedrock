@@ -142,7 +142,15 @@ class Matrix:
 
         return res
 
-    def solve(self, b):
+    def solve(self, b, method="lu"):
+        if method == "gauss":
+            return self._solve_gaussian(b)
+        elif method == "lu":
+            return LUDecomposition(self).solve(b)
+        else:
+            raise ValueError(f"Unknown method: {method}")
+
+    def _solve_gaussian(self, b):
         if not isinstance(b, Matrix):
             b = Matrix(b)
 
@@ -236,3 +244,66 @@ class BroadcastEngine:
 
         _worker(0, 0, 0, 0)
         return out_data
+
+
+class LUDecomposition:
+    def __init__(self, matrix):
+        self.matrix = matrix
+        self.n = matrix.rows
+        self.P, self.L, self.U = self._decompose()
+
+    def _decompose(self):
+        n = self.n
+        assert n == self.matrix.cols, "Matrix must be square"
+
+        P = np.eye(n)
+        L = np.eye(n)
+        U = self.matrix.data.copy().astype(np.float64)
+
+        for k in range(n):
+            pivot_idx = np.argmax(np.abs(U[k:, k])) + k
+
+            if np.abs(U[pivot_idx, k]) < 1e-15:
+                raise ValueError("Matrix is singular and cannot be decomposed.")
+
+            U[[k, pivot_idx]] = U[[pivot_idx, k]]
+            P[[k, pivot_idx]] = P[[pivot_idx, k]]
+            if k > 0:
+                L[[k, pivot_idx], :k] = L[[pivot_idx, k], :k]
+
+            for i in range(k + 1, n):
+                factor = U[i, k] / U[k, k]
+                L[i, k] = factor
+                U[i, k:] -= factor * U[k, k:]
+
+        return Matrix(P), Matrix(L), Matrix(U)
+
+    def solve(self, b):
+        if not isinstance(b, Matrix):
+            b = Matrix(b)
+
+        Pb = self.P @ b
+        y = self._forward_substitution(self.L, Pb)
+        x = self._backward_substitution(self.U, y)
+        return x
+
+    @staticmethod
+    def _forward_substitution(L, b):
+        """Solve Ly = b (L is lower triangular)"""
+        n = L.rows
+        y = np.zeros((n, 1))
+        L_data, b_data = L.data, b.data
+        for i in range(n):
+            y[i] = b_data[i] - L_data[i, :i] @ y[:i]
+        return Matrix(y)
+
+    @staticmethod
+    def _backward_substitution(U, y):
+        """Solve Ux = y (U is upper triangular)"""
+        n = U.rows
+        x = np.zeros((n, 1))
+        U_data, y_data = U.data, y.data
+        for i in range(n - 1, -1, -1):
+            sum_ux = U_data[i, i + 1 :] @ x[i + 1 :]
+            x[i] = (y_data[i] - sum_ux) / U_data[i, i]
+        return Matrix(x)
