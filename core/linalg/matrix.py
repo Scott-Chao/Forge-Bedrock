@@ -24,6 +24,10 @@ class Matrix:
     def T(self):
         return Matrix(self.data.T)
 
+    @property
+    def is_symmetric(self):
+        return np.allclose(self.data, self.data.T)
+
     def __getitem__(self, key):
         return self.data[key]
 
@@ -147,6 +151,8 @@ class Matrix:
             return self._solve_gaussian(b)
         elif method == "lu":
             return LUDecomposition(self).solve(b)
+        elif method == "cholesky":
+            return CholeskyDecomposition(self).solve(b)
         else:
             raise ValueError(f"Unknown method: {method}")
 
@@ -294,7 +300,8 @@ class LUDecomposition:
         y = np.zeros((n, 1))
         L_data, b_data = L.data, b.data
         for i in range(n):
-            y[i] = b_data[i] - L_data[i, :i] @ y[:i]
+            sum_ly = L_data[i, :i] @ y[:i]
+            y[i] = (b_data[i] - sum_ly) / L_data[i, i]
         return Matrix(y)
 
     @staticmethod
@@ -307,3 +314,38 @@ class LUDecomposition:
             sum_ux = U_data[i, i + 1 :] @ x[i + 1 :]
             x[i] = (y_data[i] - sum_ux) / U_data[i, i]
         return Matrix(x)
+
+
+class CholeskyDecomposition:
+    def __init__(self, matrix):
+        self.matrix = matrix
+        self.n = matrix.rows
+        if not matrix.is_symmetric:
+            raise ValueError("Matrix must be symmetric for Cholesky Decomposition.")
+        self.L = self._decompose()
+
+    def _decompose(self):
+        n = self.n
+        A = self.matrix.data
+        L = np.zeros((n, n))
+
+        for i in range(n):
+            for j in range(i + 1):
+                s = L[i, :j] @ L[j, :j]
+                if i == j:
+                    val = A[i, i] - s
+                    if val <= 0:
+                        raise ValueError("Matrix is not positive-definite.")
+                    L[i, j] = np.sqrt(val)
+                else:
+                    L[i, j] = (A[i, j] - s) / L[j, j]
+
+        return Matrix(L)
+
+    def solve(self, b):
+        if not isinstance(b, Matrix):
+            b = Matrix(b)
+
+        y = LUDecomposition._forward_substitution(self.L, b)
+        x = LUDecomposition._backward_substitution(self.L.T, y)
+        return x

@@ -20,10 +20,10 @@ Implement the core routines that power data transformation and dimensionality re
 - [x] **Basic Matrix Operations**
     - [x] High-performance Matrix Multiplication (Tiling/Block-based logic).
     - [x] Custom Broadcasting engine for tensor alignment.
-- [ ] **Systems of Equations**
+- [x] **Systems of Equations**
     - [x] Gaussian Elimination with partial pivoting.
     - [x] LU Decomposition.
-    - [ ] Cholesky Decomposition (for symmetric positive-definite matrices).
+    - [x] Cholesky Decomposition (for symmetric positive-definite matrices).
 - [ ] **Eigenvalues & Iterative Methods**
     - [ ] Power Iteration (finding the dominant eigenvalue).
     - [ ] QR Algorithm for finding all eigenvalues.
