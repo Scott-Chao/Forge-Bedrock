@@ -34,7 +34,7 @@ class Matrix:
         if self.rows != self.cols:
             raise ValueError("Only square matrices have determinants.")
 
-        lu_obj = LUDecomposition(self)
+        lu_obj = LUDecomposition(self, fail_on_singular=False)
 
         P_det = np.linalg.det(lu_obj.P.data)
         U_diag = np.diag(lu_obj.U.data)
@@ -48,7 +48,7 @@ class Matrix:
         if self.rows != self.cols:
             raise ValueError("Only square matrices have determinants.")
 
-        lu_obj = LUDecomposition(self)
+        lu_obj = LUDecomposition(self, fail_on_singular=False)
         P_det = np.linalg.det(lu_obj.P.data)
         U_diag = np.diag(lu_obj.U.data)
 
@@ -333,12 +333,13 @@ class TriangularSolver:
 
 
 class LUDecomposition:
-    def __init__(self, matrix):
+    def __init__(self, matrix, fail_on_singular=True):
         if matrix.rows != matrix.cols:
             raise ValueError("LU Decomposition requires a square matrix.")
 
         self.matrix = matrix
         self.n = matrix.rows
+        self.fail_on_singular = fail_on_singular
         self.P, self.L, self.U = self._decompose()
 
     def _decompose(self):
@@ -351,7 +352,10 @@ class LUDecomposition:
             pivot_idx = np.argmax(np.abs(U[k:, k])) + k
 
             if np.abs(U[pivot_idx, k]) < 1e-15:
-                raise ValueError("Matrix is singular and cannot be decomposed.")
+                if self.fail_on_singular:
+                    raise ValueError("Matrix is singular and cannot be decomposed.")
+                else:
+                    return Matrix(P), Matrix(L), Matrix(U)
 
             U[[k, pivot_idx]] = U[[pivot_idx, k]]
             P[[k, pivot_idx]] = P[[pivot_idx, k]]
