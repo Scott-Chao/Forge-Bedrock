@@ -68,18 +68,8 @@ class Matrix:
         if self.rows != self.cols:
             raise ValueError("Only square matrices are invertible.")
 
-        n = self.rows
-        I = Matrix.eye(n)
-
-        lu_obj = LUDecomposition(self)
-
-        inv_cols = []
-        for i in range(n):
-            e_i = Matrix(I.data[:, i])
-            x_i = lu_obj.solve(e_i)
-            inv_cols.append(x_i.data)
-
-        return Matrix(np.hstack(inv_cols))
+        I = Matrix.eye(self.rows)
+        return self.solve(I, method="lu")
 
     def __getitem__(self, key):
         return self.data[key]
@@ -199,25 +189,28 @@ class Matrix:
 
         return res
 
-    def solve(self, b, method="lu"):
+    def solve(self, B, method="lu"):
         if method == "gauss":
-            return self._solve_gaussian(b)
+            return self._solve_gaussian(B)
         elif method == "lu":
-            return LUDecomposition(self).solve(b)
+            return LUDecomposition(self).solve(B)
         elif method == "cholesky":
-            return CholeskyDecomposition(self).solve(b)
+            return CholeskyDecomposition(self).solve(B)
         else:
             raise ValueError(f"Unknown method: {method}")
 
-    def _solve_gaussian(self, b):
-        if not isinstance(b, Matrix):
-            b = Matrix(b)
+    def _solve_gaussian(self, B):
+        if not isinstance(B, Matrix):
+            B = Matrix(B)
 
         assert self.rows == self.cols, "Matrix must be square"
-        assert self.rows == b.rows, "Dimension mismatch between A and b"
+        assert self.rows == B.rows, "Dimension mismatch between A and B"
 
         n = self.rows
-        aug = np.hstack([self.data.copy(), b.data.copy()])
+
+        if B.data.ndim == 1:
+            B.data = B.data.reshape(-1, 1)
+        aug = np.hstack([self.data.copy(), B.data.copy()])
 
         for k in range(n):
             pivot_idx = np.argmax(np.abs(aug[k:, k])) + k
@@ -232,8 +225,8 @@ class Matrix:
             aug[k + 1 :, k:] -= factors[:, np.newaxis] * aug[k, k:]
 
         U = Matrix(aug[:, :n])
-        b_prime = Matrix(aug[:, n:])
-        x = TriangularSolver.solve_upper(U, b_prime)
+        B_prime = Matrix(aug[:, n:])
+        x = TriangularSolver.solve_upper(U, B_prime)
 
         return x
 
@@ -305,26 +298,38 @@ class BroadcastEngine:
 
 class TriangularSolver:
     @staticmethod
-    def solve_lower(L, b):
-        """Solve Ly = b (L is lower triangular)"""
+    def solve_lower(L, B):
+        """Solve LY = B (L is lower triangular)"""
         n = L.rows
-        y = np.zeros((n, 1))
-        L_data, b_data = L.data, b.data
+
+        L_data, B_data = L.data, B.data
+        if B_data.ndim == 1:
+            B_data = B_data.reshape(-1, 1)
+
+        k = B.cols
+        Y = np.zeros((n, k))
+
         for i in range(n):
-            sum_ly = L_data[i, :i] @ y[:i]
-            y[i] = (b_data[i] - sum_ly) / L_data[i, i]
-        return Matrix(y)
+            sum_ly = L_data[i, :i] @ Y[:i, :]
+            Y[i, :] = (B_data[i, :] - sum_ly) / L_data[i, i]
+        return Matrix(Y)
 
     @staticmethod
-    def solve_upper(U, y):
-        """Solve Ux = y (U is upper triangular)"""
+    def solve_upper(U, Y):
+        """Solve UX = Y (U is upper triangular)"""
         n = U.rows
-        x = np.zeros((n, 1))
-        U_data, y_data = U.data, y.data
+
+        U_data, Y_data = U.data, Y.data
+        if Y_data.ndim == 1:
+            Y_data = Y_data.reshape(-1, 1)
+
+        k = Y.cols
+        X = np.zeros((n, k))
+
         for i in range(n - 1, -1, -1):
-            sum_ux = U_data[i, i + 1 :] @ x[i + 1 :]
-            x[i] = (y_data[i] - sum_ux) / U_data[i, i]
-        return Matrix(x)
+            sum_ux = U_data[i, i + 1 :] @ X[i + 1 :, :]
+            X[i, :] = (Y_data[i, :] - sum_ux) / U_data[i, i]
+        return Matrix(X)
 
 
 class LUDecomposition:
@@ -359,14 +364,14 @@ class LUDecomposition:
 
         return Matrix(P), Matrix(L), Matrix(U)
 
-    def solve(self, b):
-        if not isinstance(b, Matrix):
-            b = Matrix(b)
+    def solve(self, B):
+        if not isinstance(B, Matrix):
+            B = Matrix(B)
 
-        Pb = self.P @ b
-        y = TriangularSolver.solve_lower(self.L, Pb)
-        x = TriangularSolver.solve_upper(self.U, y)
-        return x
+        PB = self.P @ B
+        Y = TriangularSolver.solve_lower(self.L, PB)
+        X = TriangularSolver.solve_upper(self.U, Y)
+        return X
 
 
 class CholeskyDecomposition:
@@ -398,10 +403,10 @@ class CholeskyDecomposition:
 
         return Matrix(L)
 
-    def solve(self, b):
-        if not isinstance(b, Matrix):
-            b = Matrix(b)
+    def solve(self, B):
+        if not isinstance(B, Matrix):
+            B = Matrix(B)
 
-        y = TriangularSolver.solve_lower(self.L, b)
-        x = TriangularSolver.solve_upper(self.L.T, y)
-        return x
+        Y = TriangularSolver.solve_lower(self.L, B)
+        X = TriangularSolver.solve_upper(self.L.T, Y)
+        return X
