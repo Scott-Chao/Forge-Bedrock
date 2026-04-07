@@ -228,16 +228,14 @@ class Matrix:
             if pivot_idx != k:
                 aug[[k, pivot_idx]] = aug[[pivot_idx, k]]
 
-            for i in range(k + 1, n):
-                factor = aug[i, k] / aug[k, k]
-                aug[i, k:] -= factor * aug[k, k:]
+            factors = aug[k + 1 :, k] / aug[k, k]
+            aug[k + 1 :, k:] -= factors[:, np.newaxis] * aug[k, k:]
 
-        x = np.zeros((n, 1))
-        for i in range(n - 1, -1, -1):
-            sum_ax = aug[i, i + 1 : n] @ x[i + 1 : n]
-            x[i] = (aug[i, n] - sum_ax) / aug[i, i]
+        U = Matrix(aug[:, :n])
+        b_prime = Matrix(aug[:, n:])
+        x = TriangularSolver.solve_upper(U, b_prime)
 
-        return Matrix(x)
+        return x
 
 
 class BroadcastEngine:
@@ -305,16 +303,41 @@ class BroadcastEngine:
         return out_data
 
 
+class TriangularSolver:
+    @staticmethod
+    def solve_lower(L, b):
+        """Solve Ly = b (L is lower triangular)"""
+        n = L.rows
+        y = np.zeros((n, 1))
+        L_data, b_data = L.data, b.data
+        for i in range(n):
+            sum_ly = L_data[i, :i] @ y[:i]
+            y[i] = (b_data[i] - sum_ly) / L_data[i, i]
+        return Matrix(y)
+
+    @staticmethod
+    def solve_upper(U, y):
+        """Solve Ux = y (U is upper triangular)"""
+        n = U.rows
+        x = np.zeros((n, 1))
+        U_data, y_data = U.data, y.data
+        for i in range(n - 1, -1, -1):
+            sum_ux = U_data[i, i + 1 :] @ x[i + 1 :]
+            x[i] = (y_data[i] - sum_ux) / U_data[i, i]
+        return Matrix(x)
+
+
 class LUDecomposition:
     def __init__(self, matrix):
+        if matrix.rows != matrix.cols:
+            raise ValueError("LU Decomposition requires a square matrix.")
+
         self.matrix = matrix
         self.n = matrix.rows
         self.P, self.L, self.U = self._decompose()
 
     def _decompose(self):
         n = self.n
-        assert n == self.matrix.cols, "Matrix must be square"
-
         P = np.eye(n)
         L = np.eye(n)
         U = self.matrix.data.copy().astype(np.float64)
@@ -330,10 +353,9 @@ class LUDecomposition:
             if k > 0:
                 L[[k, pivot_idx], :k] = L[[pivot_idx, k], :k]
 
-            for i in range(k + 1, n):
-                factor = U[i, k] / U[k, k]
-                L[i, k] = factor
-                U[i, k:] -= factor * U[k, k:]
+            factors = U[k + 1 :, k] / U[k, k]
+            L[k + 1 :, k] = factors
+            U[k + 1 :, k:] -= factors[:, np.newaxis] * U[k, k:]
 
         return Matrix(P), Matrix(L), Matrix(U)
 
@@ -342,39 +364,17 @@ class LUDecomposition:
             b = Matrix(b)
 
         Pb = self.P @ b
-        y = self._forward_substitution(self.L, Pb)
-        x = self._backward_substitution(self.U, y)
+        y = TriangularSolver.solve_lower(self.L, Pb)
+        x = TriangularSolver.solve_upper(self.U, y)
         return x
-
-    @staticmethod
-    def _forward_substitution(L, b):
-        """Solve Ly = b (L is lower triangular)"""
-        n = L.rows
-        y = np.zeros((n, 1))
-        L_data, b_data = L.data, b.data
-        for i in range(n):
-            sum_ly = L_data[i, :i] @ y[:i]
-            y[i] = (b_data[i] - sum_ly) / L_data[i, i]
-        return Matrix(y)
-
-    @staticmethod
-    def _backward_substitution(U, y):
-        """Solve Ux = y (U is upper triangular)"""
-        n = U.rows
-        x = np.zeros((n, 1))
-        U_data, y_data = U.data, y.data
-        for i in range(n - 1, -1, -1):
-            sum_ux = U_data[i, i + 1 :] @ x[i + 1 :]
-            x[i] = (y_data[i] - sum_ux) / U_data[i, i]
-        return Matrix(x)
 
 
 class CholeskyDecomposition:
     def __init__(self, matrix):
-        self.matrix = matrix
-        self.n = matrix.rows
         if not matrix.is_symmetric:
             raise ValueError("Matrix must be symmetric for Cholesky Decomposition.")
+        self.matrix = matrix
+        self.n = matrix.rows
         self.L = self._decompose()
 
     def _decompose(self):
@@ -382,16 +382,19 @@ class CholeskyDecomposition:
         A = self.matrix.data
         L = np.zeros((n, n))
 
-        for i in range(n):
-            for j in range(i + 1):
-                s = L[i, :j] @ L[j, :j]
-                if i == j:
-                    val = A[i, i] - s
-                    if val <= 0:
-                        raise ValueError("Matrix is not positive-definite.")
-                    L[i, j] = np.sqrt(val)
-                else:
-                    L[i, j] = (A[i, j] - s) / L[j, j]
+        for j in range(n):
+            sum_sq = np.sum(L[j, :j] ** 2)
+            val = A[j, j] - sum_sq
+
+            if val <= 0:
+                raise ValueError("Matrix is not positive-definite.")
+
+            L[j, j] = np.sqrt(val)
+
+            if j < n - 1:
+                remaining_A = A[j + 1 :, j]
+                sums = L[j + 1 :, :j] @ L[j, :j]
+                L[j + 1 :, j] = (remaining_A - sums) / L[j, j]
 
         return Matrix(L)
 
@@ -399,6 +402,6 @@ class CholeskyDecomposition:
         if not isinstance(b, Matrix):
             b = Matrix(b)
 
-        y = LUDecomposition._forward_substitution(self.L, b)
-        x = LUDecomposition._backward_substitution(self.L.T, y)
+        y = TriangularSolver.solve_lower(self.L, b)
+        x = TriangularSolver.solve_upper(self.L.T, y)
         return x
