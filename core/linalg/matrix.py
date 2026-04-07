@@ -28,6 +28,59 @@ class Matrix:
     def is_symmetric(self):
         return np.allclose(self.data, self.data.T)
 
+    @property
+    def det(self):
+        """det(A) = det(P^-1) * det(L) * det(U)"""
+        if self.rows != self.cols:
+            raise ValueError("Only square matrices have determinants.")
+
+        lu_obj = LUDecomposition(self)
+
+        P_det = np.linalg.det(lu_obj.P.data)
+        U_diag = np.diag(lu_obj.U.data)
+        U_det = np.prod(U_diag)
+
+        return P_det * U_det
+
+    @property
+    def logdet(self):
+        """ln |det(A)| = ln |det(U)|"""
+        if self.rows != self.cols:
+            raise ValueError("Only square matrices have determinants.")
+
+        lu_obj = LUDecomposition(self)
+        P_det = np.linalg.det(lu_obj.P.data)
+        U_diag = np.diag(lu_obj.U.data)
+
+        signs = np.sign(U_diag)
+        abs_diag = np.abs(U_diag)
+
+        if np.any(abs_diag == 0):
+            return -np.inf, 0
+
+        final_sign = P_det * np.prod(signs)
+        log_abs_det = np.sum(np.log(abs_diag))
+
+        return log_abs_det, final_sign
+
+    @property
+    def inv(self):
+        if self.rows != self.cols:
+            raise ValueError("Only square matrices are invertible.")
+
+        n = self.rows
+        I = Matrix.eye(n)
+
+        lu_obj = LUDecomposition(self)
+
+        inv_cols = []
+        for i in range(n):
+            e_i = Matrix(I.data[:, i])
+            x_i = lu_obj.solve(e_i)
+            inv_cols.append(x_i.data)
+
+        return Matrix(np.hstack(inv_cols))
+
     def __getitem__(self, key):
         return self.data[key]
 
