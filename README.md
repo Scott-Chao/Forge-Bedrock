@@ -25,7 +25,7 @@ Implement the core routines that power data transformation and dimensionality re
     - [x] LU Decomposition.
     - [x] Cholesky Decomposition (for symmetric positive-definite matrices).
 - [ ] **Eigenvalues & Iterative Methods**
-    - [ ] Power Iteration (finding the dominant eigenvalue).
+    - [x] Power Iteration (finding the dominant eigenvalue).
     - [ ] QR Algorithm for finding all eigenvalues.
 - [ ] **Advanced Matrix Decompositions**
     - [ ] **Singular Value Decomposition (SVD)**: $A = U\Sigma V^T$ implementation from scratch.

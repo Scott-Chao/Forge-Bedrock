@@ -414,3 +414,33 @@ class CholeskyDecomposition:
         Y = TriangularSolver.solve_lower(self.L, B)
         X = TriangularSolver.solve_upper(self.L.T, Y)
         return X
+
+
+class EigenSolver:
+    def __init__(self, matrix):
+        self.matrix = matrix
+        self.n = matrix.rows
+        if matrix.rows != matrix.cols:
+            raise ValueError("EigenSolver requires a square matrix.")
+
+    def power_iteration(self, max_iter=1000, tol=1e-10):
+        """
+        Power Iteration: find the dominant eigenvalue and corresponding eigenvector.
+        :return: (eigenvalue, eigenvector)
+        """
+        b_k = np.random.rand(self.n, 1)
+        b_k /= np.linalg.norm(b_k)
+
+        last_eigenvalue = 0
+
+        for _ in range(max_iter):
+            b_k = self.matrix.data @ b_k
+            b_k /= np.linalg.norm(b_k)
+
+            current_eigenvalue = (b_k.T @ self.matrix.data @ b_k)[0, 0]
+
+            if np.abs(current_eigenvalue - last_eigenvalue) < tol:
+                break
+            last_eigenvalue = current_eigenvalue
+
+        return last_eigenvalue, Matrix(b_k)
