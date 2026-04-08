@@ -24,9 +24,9 @@ Implement the core routines that power data transformation and dimensionality re
     - [x] Gaussian Elimination with partial pivoting.
     - [x] LU Decomposition.
     - [x] Cholesky Decomposition (for symmetric positive-definite matrices).
-- [ ] **Eigenvalues & Iterative Methods**
+- [x] **Eigenvalues & Iterative Methods**
     - [x] Power Iteration (finding the dominant eigenvalue).
-    - [ ] QR Algorithm for finding all eigenvalues.
+    - [x] QR Algorithm for finding all eigenvalues.
 - [ ] **Advanced Matrix Decompositions**
     - [ ] **Singular Value Decomposition (SVD)**: $A = U\Sigma V^T$ implementation from scratch.
     - [ ] **Principal Component Analysis (PCA)**: Dimensionality reduction using SVD/Covariance.

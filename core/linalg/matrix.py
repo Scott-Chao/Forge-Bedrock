@@ -230,6 +230,15 @@ class Matrix:
 
         return x
 
+    def eig(self, method="qr"):
+        solver = EigenSolver(self)
+        if method == "qr":
+            return solver.find_all_eigenvalues()
+        elif method == "power":
+            return solver.power_iteration()
+        else:
+            raise ValueError(f"Unknown eigenvalue method: {method}")
+
 
 class BroadcastEngine:
     @staticmethod
@@ -444,3 +453,58 @@ class EigenSolver:
             last_eigenvalue = current_eigenvalue
 
         return last_eigenvalue, Matrix(b_k)
+
+    def find_all_eigenvalues(self, max_iter=1000, tol=1e-10):
+        """
+        Find all eigenvalues and eigenvectors using QR Algorithm.
+        next_A = R @ Q = Q.T @ A @ Q
+        """
+        curr_A = self.matrix.data.copy()
+
+        for i in range(max_iter):
+            qr = QRDecomposition(Matrix(curr_A))
+            Q, R = qr.Q.data, qr.R.data
+
+            next_A = R @ Q
+
+            if np.allclose(np.diag(next_A), np.diag(curr_A), atol=tol):
+                break
+            curr_A = next_A
+
+        return np.diag(curr_A)
+
+
+class QRDecomposition:
+    def __init__(self, matrix):
+        self.matrix = matrix
+        self.n, self.m = matrix.rows, matrix.cols
+        self.Q, self.R = self._decompose()
+
+    def _decompose(self):
+        """
+        QR Decomposition by Householder Transformations.
+        v = x + sign(x[0]) * ||x|| * e_1
+        H = I - 2 * (v @ v.T) / (v.T @ v)
+        H is symmetric and orthogonal.
+        """
+
+        Q = np.eye(self.n)
+        R = self.matrix.data.copy().astype(np.float64)
+
+        for k in range(self.m):
+            if k >= self.n - 1:
+                break
+
+            x = R[k:, k : k + 1]
+            norm_x = np.linalg.norm(x)
+
+            v = x.copy()
+            v[0] += np.sign(x[0, 0]) * norm_x if x[0, 0] != 0 else norm_x
+            v /= np.linalg.norm(v)
+
+            # R = H @ R = (I - 2 v @ v.T) @ R = R - 2 v @ v.T @ R
+            R[k:, k:] -= 2 * v @ (v.T @ R[k:, k:])
+            # Q = Q @ H = Q @ (I - 2 v @ v.T) = Q - 2 Q @ v @ v.T
+            Q[:, k:] -= 2 * (Q[:, k::] @ v) @ v.T
+
+        return Matrix(Q), Matrix(R)
