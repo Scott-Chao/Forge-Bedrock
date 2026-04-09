@@ -105,8 +105,8 @@ def test_power_iteration(random_symmetric_matrix):
 def test_qr_algorithm_eigenvalues(random_symmetric_matrix):
     arr, m = random_symmetric_matrix
 
-    # Use custom QR algorithm to find all eigenvalues
-    eigenvalues = m.eig(method="qr")
+    # Use custom QR algorithm
+    eigenvalues, eigenvectors = m.eig(method="qr")
 
     # Compare with Numpy's standard implementation
     np_eigvals = np.linalg.eigvals(arr)

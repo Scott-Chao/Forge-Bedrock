@@ -233,7 +233,7 @@ class Matrix:
     def eig(self, method="qr"):
         solver = EigenSolver(self)
         if method == "qr":
-            return solver.find_all_eigenvalues()
+            return solver.find_all_eigen()
         elif method == "power":
             return solver.power_iteration()
         else:
@@ -454,24 +454,27 @@ class EigenSolver:
 
         return last_eigenvalue, Matrix(b_k)
 
-    def find_all_eigenvalues(self, max_iter=1000, tol=1e-10):
+    def find_all_eigen(self, max_iter=1000, tol=1e-10):
         """
         Find all eigenvalues and eigenvectors using QR Algorithm.
         next_A = R @ Q = Q.T @ A @ Q
         """
         curr_A = self.matrix.data.copy()
+        n = self.n
+        V = np.eye(n)
 
         for i in range(max_iter):
             qr = QRDecomposition(Matrix(curr_A))
             Q, R = qr.Q.data, qr.R.data
 
             next_A = R @ Q
+            V @= Q
 
             if np.allclose(np.diag(next_A), np.diag(curr_A), atol=tol):
                 break
             curr_A = next_A
 
-        return np.diag(curr_A)
+        return np.diag(curr_A), Matrix(V)
 
 
 class QRDecomposition:
