@@ -28,7 +28,7 @@ Implement the core routines that power data transformation and dimensionality re
     - [x] Power Iteration (finding the dominant eigenvalue).
     - [x] QR Algorithm for finding all eigenvalues.
 - [ ] **Advanced Matrix Decompositions**
-    - [ ] **Singular Value Decomposition (SVD)**: $A = U\Sigma V^T$ implementation from scratch.
+    - [x] **Singular Value Decomposition (SVD)**: $A = U\Sigma V^T$ implementation from scratch.
     - [ ] **Principal Component Analysis (PCA)**: Dimensionality reduction using SVD/Covariance.
     - [ ] **Moore-Penrose Pseudoinverse**: Solving overdetermined systems via $A^+ = (A^T A)^{-1} A^T$.
 - [ ] **Applications**

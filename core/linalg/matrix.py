@@ -511,3 +511,69 @@ class QRDecomposition:
             Q[:, k:] -= 2 * (Q[:, k::] @ v) @ v.T
 
         return Matrix(Q), Matrix(R)
+
+
+class SVDDecomposition:
+    def __init__(self, matrix, tol=1e-10, full_matrices=True):
+        self.matrix = matrix
+        self.tol = tol
+        self.full_matrices = full_matrices
+        self.U, self.S, self.VT = self._decompose()
+
+    def _decompose(self):
+        A = self.matrix.data
+        m, n = A.shape
+
+        if m >= n:
+            U, Sigma, VT = self._decompose_tall(A, m, n)
+        else:
+            V, Sigma_tall, UT = self._decompose_tall(A.T, n, m)
+            U, Sigma, VT = UT.T, Sigma_tall.T, V.T
+
+        if not self.full_matrices:
+            # Return Reduced SVD
+            k = min(m, n)
+            U = U[:, :k]
+            Sigma = Sigma[:k, :k]
+            VT = VT[:k, :]
+
+        return Matrix(U), Matrix(Sigma), Matrix(VT)
+
+    def _decompose_tall(self, A, m, n):
+        ATA = A.T @ A
+        eigenvalues, V_mat = Matrix(ATA).eig()
+        V = V_mat.data
+
+        singular_values = np.sqrt(np.maximum(eigenvalues, 0))
+        idx = np.argsort(singular_values)[::-1]
+        singular_values = singular_values[idx]
+        V = V[:, idx]
+
+        valid = singular_values > self.tol
+        k = np.sum(valid)
+        singular_values_valid = singular_values[valid]
+
+        U_partial = np.zeros((m, k))
+        for i in range(k):
+            U_partial[:, i] = A @ V[:, i] / singular_values_valid[i]
+
+        if self.full_matrices and k < m:
+            I = np.eye(m)
+            aug = np.hstack([U_partial, I])
+            qr = QRDecomposition(Matrix(aug))
+            U = qr.Q.data
+
+            for i in range(k):
+                if np.dot(U[:, i], U_partial[:, i]) < 0:
+                    U[:, i] *= -1
+        else:
+            U = U_partial
+            if not self.full_matrices:
+                if k < n:
+                    U = np.hstack([U, np.zeros((m, n - k))])
+
+        Sigma = np.zeros((m, n))
+        for i in range(min(k, m, n)):
+            Sigma[i, i] = singular_values_valid[i]
+
+        return U, Sigma, V.T
