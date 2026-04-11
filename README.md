@@ -1,6 +1,6 @@
 # Forge-Bedrock
 
-**Forge-Bedrock** is a long-term, bottom-up project dedicated to "reinventing the wheel" for the fundamental building blocks of Artificial Intelligence. 
+**Forge-Bedrock** is a long-term, bottom-up project dedicated to "reinventing the wheel" for the fundamental building blocks of Artificial Intelligence.
 
 The philosophy of this project is to bridge the gap between abstract mathematical theorems (Calculus, Linear Algebra, Probability) and functional code. By implementing core algorithms from scratch, this repository serves as a personal laboratory for mastering the "bedrock" of AI—transforming black-box frameworks into transparent, intuitive logic.
 
@@ -31,6 +31,12 @@ Implement the core routines that power data transformation and dimensionality re
     - [x] **Singular Value Decomposition (SVD)**: $A = U\Sigma V^T$ implementation from scratch.
     - [x] **Principal Component Analysis (PCA)**: Dimensionality reduction using SVD/Covariance.
     - [x] **Moore-Penrose Pseudoinverse**: Solving overdetermined systems via $A^+ = (A^T A)^{-1} A^T$.
+- [ ] **Numerical Stability & Performance**
+    - [ ] **Adaptive Relative Tolerance** based on machine epsilon and matrix norms.
+    - [ ] **Stable SVD** via One-Sided Jacobi rotations (avoiding $A^T A$ precision loss).
+    - [ ] **Hessenberg Reduction** for $O(n^2)$ QR iteration acceleration.
+    - [ ] **Shifted QR Algorithm** with Wilkinson shifts and deflation logic.
+    - [ ] **In-place Householder Storage** and implicit $Q$ matrix construction.
 - [ ] **Applications**
     - [ ] Image compression via Low-Rank Approximation (SVD).
     - [ ] Least Squares Regression using the Normal Equation.
