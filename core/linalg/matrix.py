@@ -71,6 +71,29 @@ class Matrix:
         I = Matrix.eye(self.rows)
         return self.solve(I, method="lu")
 
+    @property
+    def pinv(self):
+        """
+        Moore-Penrose pseudo-inverse
+        A+ = (A.T @ A)^-1 @ A.T
+        A+ = V @ Sigma+ @ U.T
+        """
+        svd = SVDDecomposition(self)
+        U, S, VT = svd.U, svd.S, svd.VT
+
+        m, n = self.rows, self.cols
+        sigma_plus = np.zeros((n, m))
+
+        singular_values = np.diag(S.data)
+
+        tol = max(m, n) * np.spacing(np.max(singular_values))
+
+        for i, s in enumerate(singular_values):
+            if s > tol:
+                sigma_plus[i, i] = 1.0 / s
+
+        return VT.T @ Matrix(sigma_plus) @ U.T
+
     def __getitem__(self, key):
         return self.data[key]
 
