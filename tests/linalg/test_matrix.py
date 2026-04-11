@@ -2,7 +2,7 @@ import operator
 import pytest
 import numpy as np
 
-from core.linalg.matrix import Matrix
+from core.linalg import Matrix
 
 
 # ---------------------------------------------------------

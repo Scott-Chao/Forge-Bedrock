@@ -1,12 +1,7 @@
 import pytest
 import numpy as np
 
-from core.linalg.matrix import (
-    Matrix,
-    LUDecomposition,
-    CholeskyDecomposition,
-    TriangularSolver,
-)
+from core.linalg import Matrix, LU, Cholesky, TriangularSolver
 
 
 # ---------------------------------------------------------
@@ -163,13 +158,13 @@ def test_solve_gaussian_errors(singular_matrix_data):
 def test_lu_decomposition(square_matrix_data):
     arr, mA = square_matrix_data
 
-    lu = LUDecomposition(mA)
+    lu = LU(mA)
     P, L, U = lu.P.data, lu.L.data, lu.U.data
 
     # Check if P * A = L * U (Based on implementation logic)
     PA = P @ arr
-    LU = L @ U
-    np.testing.assert_allclose(PA, LU, atol=1e-12)
+    LU_res = L @ U
+    np.testing.assert_allclose(PA, LU_res, atol=1e-12)
 
     # Check if L is lower triangular (all elements above diag are 0)
     assert np.allclose(L, np.tril(L))
@@ -192,7 +187,7 @@ def test_solve_lu(square_matrix_data):
 def test_lu_decomposition_errors(singular_matrix_data):
     _, m_sing = singular_matrix_data
     with pytest.raises(ValueError, match="Matrix is singular and cannot be decomposed"):
-        LUDecomposition(m_sing)
+        LU(m_sing)
 
 
 # ---------------------------------------------------------
@@ -201,7 +196,7 @@ def test_lu_decomposition_errors(singular_matrix_data):
 def test_cholesky_decomposition(spd_matrix_data):
     arr, mA = spd_matrix_data
 
-    chol = CholeskyDecomposition(mA)
+    chol = Cholesky(mA)
     L = chol.L.data
 
     # Check if L * L^T = A
@@ -226,7 +221,7 @@ def test_cholesky_decomposition_errors(square_matrix_data):
     # Pass a non-symmetric matrix
     _, m_nonsym = square_matrix_data
     with pytest.raises(ValueError, match="Matrix must be symmetric"):
-        CholeskyDecomposition(m_nonsym)
+        Cholesky(m_nonsym)
 
     # Pass a symmetric but NOT positive-definite matrix
     arr_not_pd = np.array(
@@ -237,7 +232,7 @@ def test_cholesky_decomposition_errors(square_matrix_data):
     )
     m_not_pd = Matrix(arr_not_pd)
     with pytest.raises(ValueError, match="Matrix is not positive-definite"):
-        CholeskyDecomposition(m_not_pd)
+        Cholesky(m_not_pd)
 
 
 # ---------------------------------------------------------

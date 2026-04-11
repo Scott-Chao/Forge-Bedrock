@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 
-from core.linalg.matrix import Matrix, QRDecomposition, EigenSolver
+from core.linalg import Matrix, QR
 
 # =========================================================
 # Fixtures (Generate test data)
@@ -45,7 +45,7 @@ def random_symmetric_matrix():
 
 def test_qr_decomposition_square(random_square_matrix):
     arr, m = random_square_matrix
-    qr = QRDecomposition(m)
+    qr = QR(m)
     Q, R = qr.Q, qr.R
 
     # 1. Q must be an orthogonal matrix: Q^T @ Q ≈ I
@@ -62,7 +62,7 @@ def test_qr_decomposition_square(random_square_matrix):
 
 def test_qr_decomposition_tall(random_tall_matrix):
     arr, m = random_tall_matrix
-    qr = QRDecomposition(m)
+    qr = QR(m)
     Q, R = qr.Q, qr.R
 
     # Q is still a full orthogonal matrix: Q^T @ Q ≈ I (Q is n x n)
@@ -157,7 +157,7 @@ def bench_data_eig():
 def test_bench_qr_custom(benchmark, bench_data_qr):
     """Benchmark: Custom Householder QR Decomposition"""
     _, m = bench_data_qr
-    benchmark(lambda: QRDecomposition(m))
+    benchmark(lambda: QR(m))
 
 
 def test_bench_qr_numpy(benchmark, bench_data_qr):
