@@ -45,7 +45,11 @@ class EigenSolver:
         if matrix.rows != matrix.cols:
             raise ValueError("EigenSolver requires a square matrix.")
 
-    def power_iteration(self, max_iter=1000, tol=1e-10):
+        from .decompositions import get_adaptive_tol
+
+        self.tol = get_adaptive_tol(matrix.data)
+
+    def power_iteration(self, max_iter=1000):
         """
         Power Iteration: find the dominant eigenvalue and corresponding eigenvector.
         :return: (eigenvalue, eigenvector)
@@ -61,13 +65,13 @@ class EigenSolver:
 
             current_eigenvalue = (b_k.T @ self.matrix.data @ b_k)[0, 0]
 
-            if np.abs(current_eigenvalue - last_eigenvalue) < tol:
+            if np.abs(current_eigenvalue - last_eigenvalue) < self.tol:
                 break
             last_eigenvalue = current_eigenvalue
 
         return last_eigenvalue, Matrix(b_k)
 
-    def find_all_eigen(self, max_iter=1000, tol=1e-10):
+    def find_all_eigen(self, max_iter=1000):
         """
         Find all eigenvalues and eigenvectors using QR Algorithm.
         next_A = R @ Q = Q.T @ A @ Q
@@ -85,7 +89,7 @@ class EigenSolver:
             next_A = R @ Q
             V @= Q
 
-            if np.allclose(np.diag(next_A), np.diag(curr_A), atol=tol):
+            if np.allclose(np.diag(next_A), np.diag(curr_A), atol=self.tol):
                 break
             curr_A = next_A
 

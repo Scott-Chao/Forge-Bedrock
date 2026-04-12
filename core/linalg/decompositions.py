@@ -3,6 +3,12 @@ from .matrix import Matrix
 from .solvers import TriangularSolver
 
 
+def get_adaptive_tol(A_data):
+    eps = np.finfo(A_data.dtype).eps
+    norm_a = np.linalg.norm(A_data, ord=np.inf)
+    return max(A_data.shape) * norm_a * eps
+
+
 class LU:
     def __init__(self, matrix, fail_on_singular=True):
         if matrix.rows != matrix.cols:
@@ -124,9 +130,9 @@ class QR:
 
 
 class SVD:
-    def __init__(self, matrix, tol=1e-10, full_matrices=True):
+    def __init__(self, matrix, full_matrices=True):
         self.matrix = matrix
-        self.tol = tol
+        self.tol = get_adaptive_tol(matrix.data)
         self.full_matrices = full_matrices
         self.U, self.S, self.VT = self._decompose()
 
