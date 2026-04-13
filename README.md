@@ -33,7 +33,7 @@ Implement the core routines that power data transformation and dimensionality re
     - [x] **Moore-Penrose Pseudoinverse**: Solving overdetermined systems via $A^+ = (A^T A)^{-1} A^T$.
 - [ ] **Numerical Stability & Performance**
     - [x] **Adaptive Relative Tolerance** based on machine epsilon and matrix norms.
-    - [ ] **Stable SVD** via One-Sided Jacobi rotations (avoiding $A^T A$ precision loss).
+    - [x] **Stable SVD** via One-Sided Jacobi rotations (avoiding $A^T A$ precision loss).
     - [ ] **Hessenberg Reduction** for $O(n^2)$ QR iteration acceleration.
     - [ ] **Shifted QR Algorithm** with Wilkinson shifts and deflation logic.
     - [ ] **In-place Householder Storage** and implicit $Q$ matrix construction.

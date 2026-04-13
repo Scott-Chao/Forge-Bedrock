@@ -130,21 +130,39 @@ class QR:
 
 
 class SVD:
-    def __init__(self, matrix, full_matrices=True):
+    def __init__(self, matrix, method="jacobi", full_matrices=True, **kwargs):
         self.matrix = matrix
         self.tol = get_adaptive_tol(matrix.data)
         self.full_matrices = full_matrices
-        self.U, self.S, self.VT = self._decompose()
+        self.U, self.S, self.VT = self._decompose(method, **kwargs)
 
-    def _decompose(self):
-        A = self.matrix.data
-        m, n = A.shape
+    def _decompose(self, method, **kwargs):
+        A_raw = self.matrix.data
+        m, n = A_raw.shape
+        is_wide = m < n
+        A_tall = A_raw.T if is_wide else A_raw
+        if is_wide:
+            m, n = n, m
 
-        if m >= n:
-            U, Sigma, VT = self._decompose_tall(A, m, n)
+        if method == "qr":
+            U, s, VT = self._decompose_tall_qr(A_tall)
+        elif method == "jacobi":
+            max_sweeps = kwargs.get("max_sweeps", 100)
+            U, s, VT = self._decompose_tall_jacobi(A_tall, max_sweeps)
         else:
-            V, Sigma_tall, UT = self._decompose_tall(A.T, n, m)
-            U, Sigma, VT = UT.T, Sigma_tall.T, V.T
+            raise ValueError(f"Unknown method: {method}")
+
+        norms = np.linalg.norm(U, axis=0)
+        target_cols = m if self.full_matrices else n
+        if np.any(norms < 0.5) or U.shape[1] < target_cols:
+            U = self._orthogonal_completion(U, target_cols)
+
+        Sigma = np.zeros((m, n))
+        for i in range(len(s)):
+            Sigma[i, i] = s[i]
+
+        if is_wide:
+            U, Sigma, VT = VT.T, Sigma.T, U.T
 
         # Reduced SVD
         if not self.full_matrices:
@@ -155,7 +173,8 @@ class SVD:
 
         return Matrix(U), Matrix(Sigma), Matrix(VT)
 
-    def _decompose_tall(self, A, m, n):
+    def _decompose_tall_qr(self, A):
+        m, n = A.shape
         ATA = A.T @ A
         eigenvalues, V_mat = Matrix(ATA).eig()
         V = V_mat.data
@@ -165,31 +184,74 @@ class SVD:
         singular_values = singular_values[idx]
         V = V[:, idx]
 
-        valid = singular_values > self.tol
-        k = np.sum(valid)
-        singular_values_valid = singular_values[valid]
+        U = np.zeros((m, n))
+        for i in range(n):
+            if singular_values[i] > self.tol:
+                U[:, i] = A @ V[:, i] / singular_values[i]
+            else:
+                U[:, i] = 0.0
 
-        U_partial = np.zeros((m, k))
+        return U, singular_values, V.T
+
+    def _decompose_tall_jacobi(self, A, max_sweeps):
+        """Stable SVD via One-Sided Jacobi Rotations"""
+        A = A.copy()
+        m, n = A.shape
+        V = np.eye(n)
+
+        for _ in range(max_sweeps):
+            converged = True
+            for i in range(n):
+                for j in range(i + 1, n):
+                    w = A[:, i] @ A[:, j]
+                    if abs(w) <= self.tol:
+                        continue
+
+                    converged = False
+                    vx = A[:, i] @ A[:, i]
+                    vy = A[:, j] @ A[:, j]
+
+                    xi = (vy - vx) / (2 * w)
+                    sign_xi = 1.0 if xi >= 0 else -1.0
+                    t = sign_xi / (abs(xi) + np.sqrt(xi**2 + 1))
+                    c = 1 / np.sqrt(1 + t**2)
+                    s = c * t
+
+                    rot = np.array([[c, s], [-s, c]])
+                    A[:, [i, j]] = A[:, [i, j]] @ rot
+                    V[:, [i, j]] = V[:, [i, j]] @ rot
+
+            if converged:
+                break
+
+        singular_values = np.linalg.norm(A, axis=0)
+        idx = np.argsort(singular_values)[::-1]
+        singular_values = singular_values[idx]
+        A = A[:, idx]
+        V = V[:, idx]
+
+        U = np.zeros((m, n))
+        for i in range(n):
+            if singular_values[i] > self.tol:
+                U[:, i] = A[:, i] / singular_values[i]
+            else:
+                U[:, i] = 0.0
+
+        return U, singular_values, V.T
+
+    def _orthogonal_completion(self, U_partial, target_cols):
+        m = U_partial.shape[0]
+        k = U_partial.shape[1]
+        if k >= target_cols:
+            return U_partial[:, :target_cols]
+
+        I = np.eye(m)
+        aug = np.hstack([U_partial, I])
+        qr = QR(Matrix(aug))
+        U = qr.Q.data
+
         for i in range(k):
-            U_partial[:, i] = A @ V[:, i] / singular_values_valid[i]
+            if np.dot(U[:, i], U_partial[:, i]) < 0:
+                U[:, i] *= -1
 
-        if self.full_matrices and k < m:
-            I = np.eye(m)
-            aug = np.hstack([U_partial, I])
-            qr = QR(Matrix(aug))
-            U = qr.Q.data
-
-            for i in range(k):
-                if np.dot(U[:, i], U_partial[:, i]) < 0:
-                    U[:, i] *= -1
-        else:
-            U = U_partial
-            if not self.full_matrices:
-                if k < n:
-                    U = np.hstack([U, np.zeros((m, n - k))])
-
-        Sigma = np.zeros((m, n))
-        for i in range(min(k, m, n)):
-            Sigma[i, i] = singular_values_valid[i]
-
-        return U, Sigma, V.T
+        return U
