@@ -71,7 +71,15 @@ class EigenSolver:
 
         return last_eigenvalue, Matrix(b_k)
 
-    def find_all_eigen(self, max_iter=1000):
+    def find_all_eigen(self, method="hessenberg", max_iter=1000):
+        if method == "qr":
+            return self._find_all_eigen_qr(max_iter)
+        elif method == "hessenberg":
+            return self._find_all_eigen_hessenberg(max_iter)
+        else:
+            raise ValueError(f"Unknown method: {method}")
+
+    def _find_all_eigen_qr(self, max_iter=1000):
         """
         Find all eigenvalues and eigenvectors using QR Algorithm.
         next_A = R @ Q = Q.T @ A @ Q
@@ -94,3 +102,14 @@ class EigenSolver:
             curr_A = next_A
 
         return np.diag(curr_A), Matrix(V)
+
+    def _find_all_eigen_hessenberg(self, max_iter=1000):
+        """
+        Find all eigenvalues and eigenvectors using QR Algorithm accelerated by Hessenberg reduction.
+        """
+        from .decompositions import Schur
+
+        schur = Schur(self.matrix, max_iter=max_iter)
+        eigenvalues = np.diag(schur.T.data)
+        eigenvectors = schur.Q
+        return eigenvalues, eigenvectors

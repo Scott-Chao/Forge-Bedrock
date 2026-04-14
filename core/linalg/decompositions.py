@@ -97,6 +97,7 @@ class QR:
     def __init__(self, matrix):
         self.matrix = matrix
         self.n, self.m = matrix.rows, matrix.cols
+        self.tol = get_adaptive_tol(matrix.data)
         self.Q, self.R = self._decompose()
 
     def _decompose(self):
@@ -117,6 +118,10 @@ class QR:
             x = R[k:, k : k + 1]
             norm_x = np.linalg.norm(x)
 
+            if norm_x <= self.tol:
+                R[k:, k] = 0.0
+                continue
+
             v = x.copy()
             v[0] += np.sign(x[0, 0]) * norm_x if x[0, 0] != 0 else norm_x
             v /= np.linalg.norm(v)
@@ -127,6 +132,99 @@ class QR:
             Q[:, k:] -= 2 * (Q[:, k::] @ v) @ v.T
 
         return Matrix(Q), Matrix(R)
+
+
+class Hessenberg:
+    def __init__(self, matrix):
+        self.matrix = matrix
+        self.n = matrix.rows
+        self.tol = get_adaptive_tol(self.matrix.data)
+        if matrix.rows != matrix.cols:
+            raise ValueError("Hessenberg requires a square matrix.")
+        self.H, self.Q = self._decompose()
+
+    def _decompose(self):
+        """
+        Reduce A to Upper Hessenberg form H using Householder reflections.
+        H = Q.T @ A @ Q
+        """
+        n = self.n
+        H = self.matrix.data.copy().astype(np.float64)
+        Q = np.eye(n)
+
+        for k in range(n - 2):
+            x = H[k + 1 :, k : k + 1]
+            norm_x = np.linalg.norm(x)
+
+            if norm_x <= self.tol:
+                H[k + 1 :, k] = 0.0
+                continue
+
+            v = x.copy()
+            v[0, 0] += np.sign(x[0, 0]) * norm_x if x[0, 0] != 0 else norm_x
+            v /= np.linalg.norm(v)
+
+            # Left multiply: Apply reflection to rows
+            H[k + 1 :, k:] -= 2 * v @ (v.T @ H[k + 1 :, k:])
+            # Right multiply: Apply reflection to columns
+            H[:, k + 1 :] -= 2 * (H[:, k + 1 :] @ v) @ v.T
+            # Accumulate the transformation matrix Q
+            Q[:, k + 1 :] -= 2 * (Q[:, k + 1 :] @ v) @ v.T
+
+        return Matrix(H), Matrix(Q)
+
+
+class Schur:
+    def __init__(self, matrix, max_iter=1000):
+        self.matrix = matrix
+        self.max_iter = max_iter
+        self.tol = get_adaptive_tol(matrix.data)
+        self.T, self.Q = self._decompose()
+
+    def _decompose(self):
+        hess = Hessenberg(self.matrix)
+        curr_T = hess.H.data.copy()
+        Q_total = hess.Q.data.copy()
+        n = curr_T.shape[0]
+
+        for _ in range(self.max_iter):
+            sub_diag = np.diag(curr_T, k=-1)
+            if np.max(np.abs(sub_diag)) < self.tol:
+                break
+            curr_T, Q_total = self._qr_step_givens(curr_T, Q_total)
+
+        return Matrix(curr_T), Matrix(Q_total)
+
+    @staticmethod
+    def generate_givens(a, b):
+        """Compute cosine and sine for Givens rotations."""
+        if b == 0:
+            return 1.0, 0.0
+        r = np.hypot(a, b)
+        return a / r, b / r
+
+    def _qr_step_givens(self, H, Q_total):
+        """Perform one QR step on a Hessenberg matrix using Givens rotations."""
+        n = H.shape[0]
+        rotations = []
+
+        # Left multiplications
+        for i in range(n - 1):
+            c, s = self.generate_givens(H[i, i], H[i + 1, i])
+            rotations.append((c, s))
+
+            rot = np.array([[c, s], [-s, c]])
+            H[i : i + 2, i:] = rot @ H[i : i + 2, i:]
+            H[i + 1, i] = 0.0
+
+        # Right multiplications
+        for i in range(n - 1):
+            c, s = rotations[i]
+            rot = np.array([[c, -s], [s, c]])
+            H[: i + 2, i : i + 2] = H[: i + 2, i : i + 2] @ rot
+            Q_total[:, i : i + 2] = Q_total[:, i : i + 2] @ rot
+
+        return H, Q_total
 
 
 class SVD:
