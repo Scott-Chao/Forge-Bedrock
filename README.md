@@ -35,7 +35,7 @@ Implement the core routines that power data transformation and dimensionality re
     - [x] **Adaptive Relative Tolerance** based on machine epsilon and matrix norms.
     - [x] **Stable SVD** via One-Sided Jacobi rotations (avoiding $A^T A$ precision loss).
     - [x] **Hessenberg Reduction** for $O(n^2)$ QR iteration acceleration.
-    - [ ] **Shifted QR Algorithm** with Wilkinson shifts and deflation logic.
+    - [x] **Shifted QR Algorithm** with Wilkinson shifts and deflation logic.
     - [ ] **In-place Householder Storage** and implicit $Q$ matrix construction.
 - [ ] **Applications**
     - [ ] Image compression via Low-Rank Approximation (SVD).

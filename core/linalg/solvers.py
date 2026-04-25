@@ -71,11 +71,13 @@ class EigenSolver:
 
         return last_eigenvalue, Matrix(b_k)
 
-    def find_all_eigen(self, method="hessenberg", max_iter=1000):
+    def find_all_eigen(self, method="wilkinson", max_iter=1000):
         if method == "qr":
             return self._find_all_eigen_qr(max_iter)
         elif method == "hessenberg":
             return self._find_all_eigen_hessenberg(max_iter)
+        elif method == "wilkinson":
+            return self._find_all_eigen_wilkinson(max_iter)
         else:
             raise ValueError(f"Unknown method: {method}")
 
@@ -109,7 +111,16 @@ class EigenSolver:
         """
         from .decompositions import Schur
 
-        schur = Schur(self.matrix, max_iter=max_iter)
+        schur = Schur(self.matrix, max_iter=max_iter, use_shifts=False)
+        eigenvalues = np.diag(schur.T.data)
+        eigenvectors = schur.Q
+        return eigenvalues, eigenvectors
+
+    def _find_all_eigen_wilkinson(self, max_iter=1000):
+        """Find all eigenvalues and eigenvectors using Hessenberg reduction + Wilkinson Shift + Deflation."""
+        from .decompositions import Schur
+
+        schur = Schur(self.matrix, max_iter=max_iter, use_shifts=True)
         eigenvalues = np.diag(schur.T.data)
         eigenvectors = schur.Q
         return eigenvalues, eigenvectors

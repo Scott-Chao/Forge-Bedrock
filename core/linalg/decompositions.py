@@ -175,25 +175,52 @@ class Hessenberg:
 
 
 class Schur:
-    def __init__(self, matrix, max_iter=1000):
+    def __init__(self, matrix, max_iter=1000, use_shifts=True):
         self.matrix = matrix
         self.max_iter = max_iter
+        self.use_shifts = use_shifts
         self.tol = get_adaptive_tol(matrix.data)
         self.T, self.Q = self._decompose()
 
     def _decompose(self):
         hess = Hessenberg(self.matrix)
-        curr_T = hess.H.data.copy()
-        Q_total = hess.Q.data.copy()
-        n = curr_T.shape[0]
+        T = hess.H.data.copy()
+        Q = hess.Q.data.copy()
+        n = T.shape[0]
 
-        for _ in range(self.max_iter):
-            sub_diag = np.diag(curr_T, k=-1)
-            if np.max(np.abs(sub_diag)) < self.tol:
-                break
-            curr_T, Q_total = self._qr_step_givens(curr_T, Q_total)
+        curr_n = n
+        iter_count = 0
 
-        return Matrix(curr_T), Matrix(Q_total)
+        while curr_n > 1 and iter_count < self.max_iter:
+            # Check Deflation
+            if np.abs(T[curr_n - 1, curr_n - 2]) < self.tol:
+                T[curr_n - 1, curr_n - 2] = 0.0
+                curr_n -= 1
+                continue
+
+            # Calculate Wilkinson Shift
+            mu = 0.0
+            if self.use_shifts:
+                mu = self._get_wilkinson_shift(
+                    T[curr_n - 2, curr_n - 2],
+                    T[curr_n - 2, curr_n - 1],
+                    T[curr_n - 1, curr_n - 2],
+                    T[curr_n - 1, curr_n - 1],
+                )
+
+                diag_idx = np.diag_indices(curr_n)
+                T[diag_idx] -= mu
+
+            # QR Step using Givens
+            self._qr_step_givens(T[:curr_n, :curr_n], Q[:, :curr_n])
+
+            # Add Shift Back
+            if self.use_shifts:
+                T[diag_idx] += mu
+
+            iter_count += 1
+
+        return Matrix(T), Matrix(Q)
 
     @staticmethod
     def generate_givens(a, b):
@@ -225,6 +252,18 @@ class Schur:
             Q_total[:, i : i + 2] = Q_total[:, i : i + 2] @ rot
 
         return H, Q_total
+
+    def _get_wilkinson_shift(self, a11, a12, a21, a22):
+        """"""
+        d = (a11 - a22) / 2.0
+        disc = d**2 + a12 * a21
+        if disc < 0:
+            return a22
+        denom = np.abs(d) + np.sqrt(disc)
+        if denom == 0:
+            return a22
+        mu = a22 - (np.sign(d) if d != 0 else 1.0) * (a12 * a21) / denom
+        return mu
 
 
 class SVD:
