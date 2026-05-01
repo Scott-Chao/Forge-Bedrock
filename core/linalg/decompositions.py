@@ -97,8 +97,10 @@ class QR:
     def __init__(self, matrix):
         self.matrix = matrix
         self.n, self.m = matrix.rows, matrix.cols
+        self.data = matrix.data.copy().astype(np.float64)
+        self.betas = np.zeros(min(self.m, self.n))
         self.tol = get_adaptive_tol(matrix.data)
-        self.Q, self.R = self._decompose()
+        self._decompose()
 
     def _decompose(self):
         """
@@ -108,40 +110,71 @@ class QR:
         H is symmetric and orthogonal.
         """
 
-        Q = np.eye(self.n)
-        R = self.matrix.data.copy().astype(np.float64)
-
-        for k in range(self.m):
-            if k >= self.n - 1:
-                break
-
-            x = R[k:, k : k + 1]
+        for k in range(min(self.n - 1, self.m)):
+            x = self.data[k:, k]
             norm_x = np.linalg.norm(x)
 
             if norm_x <= self.tol:
-                R[k:, k] = 0.0
+                self.data[k:, k] = 0.0
+                self.betas[k] = 0.0
                 continue
 
-            v = x.copy()
-            v[0] += np.sign(x[0, 0]) * norm_x if x[0, 0] != 0 else norm_x
-            v /= np.linalg.norm(v)
+            rho = -np.sign(x[0]) * norm_x if x[0] != 0 else -norm_x
 
-            # R = H @ R = (I - 2 v @ v.T) @ R = R - 2 v @ v.T @ R
-            R[k:, k:] -= 2 * v @ (v.T @ R[k:, k:])
-            # Q = Q @ H = Q @ (I - 2 v @ v.T) = Q - 2 Q @ v @ v.T
-            Q[:, k:] -= 2 * (Q[:, k::] @ v) @ v.T
+            v_first = x[0] - rho
+            v_remaining = x[1:] / v_first
 
-        return Matrix(Q), Matrix(R)
+            self.data[k, k] = rho
+            self.data[k + 1 :, k] = v_remaining
+
+            self.betas[k] = 2.0 / (1.0 + np.sum(v_remaining**2))
+
+            # A = (I - beta * v @ v.T) @ A
+            if k < self.m - 1:
+                # v = [1; self.data[k+1:, k]]
+                A_sub = self.data[k:, k + 1 :]
+                # v.T @ A_sub = A_sub[0, :] + v_rem.T @ A_sub[1:, :]
+                v_dot_A = A_sub[0, :] + self.data[k + 1 :, k] @ A_sub[1:, :]
+                # A_sub = A_sub - beta * v @ (v.T @ A_sub)
+                A_sub[0, :] -= self.betas[k] * v_dot_A
+                A_sub[1:, :] -= self.betas[k] * np.outer(self.data[k + 1 :, k], v_dot_A)
+
+    @property
+    def R(self):
+        R = np.triu(self.data)
+        return Matrix(R)
+
+    @property
+    def Q(self):
+        n = self.n
+        Q = np.eye(n)
+
+        for k in range(min(n - 1, self.m), -1, -1):
+            if k >= len(self.betas) or self.betas[k] == 0:
+                continue
+
+            beta = self.betas[k]
+            v_remaining = self.data[k + 1 :, k]
+
+            # Q[k:, k:] = (I - beta * v @ v.T) @ Q[k:, k:]
+            sub_Q = Q[k:, k:]
+            v_dot_Q = sub_Q[0, :] + v_remaining @ sub_Q[1:, :]
+            sub_Q[0, :] -= beta * v_dot_Q
+            sub_Q[1:, :] -= beta * np.outer(v_remaining, v_dot_Q)
+
+        return Matrix(Q)
 
 
 class Hessenberg:
     def __init__(self, matrix):
         self.matrix = matrix
         self.n = matrix.rows
+        self.data = matrix.data.copy().astype(np.float64)
+        self.betas = np.zeros(self.n - 2)
         self.tol = get_adaptive_tol(self.matrix.data)
         if matrix.rows != matrix.cols:
             raise ValueError("Hessenberg requires a square matrix.")
-        self.H, self.Q = self._decompose()
+        self._decompose()
 
     def _decompose(self):
         """
@@ -149,29 +182,59 @@ class Hessenberg:
         H = Q.T @ A @ Q
         """
         n = self.n
-        H = self.matrix.data.copy().astype(np.float64)
-        Q = np.eye(n)
 
         for k in range(n - 2):
-            x = H[k + 1 :, k : k + 1]
+            x = self.data[k + 1 :, k]
             norm_x = np.linalg.norm(x)
 
             if norm_x <= self.tol:
-                H[k + 1 :, k] = 0.0
+                self.data[k + 1 :, k] = 0.0
+                self.betas[k] = 0.0
                 continue
 
-            v = x.copy()
-            v[0, 0] += np.sign(x[0, 0]) * norm_x if x[0, 0] != 0 else norm_x
-            v /= np.linalg.norm(v)
+            rho = -np.sign(x[0]) * norm_x if x[0] != 0 else -norm_x
+
+            v_first = x[0] - rho
+            v_remaining = x[1:] / v_first
+
+            self.data[k + 1, k] = rho
+            self.data[k + 2 :, k] = v_remaining
+            self.betas[k] = 2.0 / (1.0 + np.sum(v_remaining**2))
+
+            beta = self.betas[k]
 
             # Left multiply: Apply reflection to rows
-            H[k + 1 :, k:] -= 2 * v @ (v.T @ H[k + 1 :, k:])
-            # Right multiply: Apply reflection to columns
-            H[:, k + 1 :] -= 2 * (H[:, k + 1 :] @ v) @ v.T
-            # Accumulate the transformation matrix Q
-            Q[:, k + 1 :] -= 2 * (Q[:, k + 1 :] @ v) @ v.T
+            sub_H_left = self.data[k + 1 :, k + 1 :]
+            v_dot_H_left = sub_H_left[0, :] + v_remaining @ sub_H_left[1:, :]
+            sub_H_left[0, :] -= beta * v_dot_H_left
+            sub_H_left[1:, :] -= beta * np.outer(v_remaining, v_dot_H_left)
 
-        return Matrix(H), Matrix(Q)
+            # Right multiply: Apply reflection to columns
+            sub_H_right = self.data[:, k + 1 :]
+            v_dot_H_right = sub_H_right[:, 0] + sub_H_right[:, 1:] @ v_remaining
+            sub_H_right[:, 0] -= beta * v_dot_H_right
+            sub_H_right[:, 1:] -= beta * np.outer(v_dot_H_right, v_remaining)
+
+    @property
+    def H(self):
+        H = np.triu(self.data, -1)
+        return Matrix(H)
+
+    @property
+    def Q(self):
+        n = self.n
+        Q = np.eye(n)
+
+        for k in range(n - 3, -1, -1):
+            v_remaining = self.data[k + 2 :, k]
+            beta = self.betas[k]
+
+            sub_Q = Q[k + 1 :, k + 1 :]
+            v_dot_Q = sub_Q[0, :] + v_remaining @ sub_Q[1:, :]
+            sub_Q[0, :] -= beta * v_dot_Q
+            sub_Q[1:, :] -= beta * np.outer(v_remaining, v_dot_Q)
+
+        return Matrix(Q)
 
 
 class Schur:

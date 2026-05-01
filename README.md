@@ -31,12 +31,12 @@ Implement the core routines that power data transformation and dimensionality re
     - [x] **Singular Value Decomposition (SVD)**: $A = U\Sigma V^T$ implementation from scratch.
     - [x] **Principal Component Analysis (PCA)**: Dimensionality reduction using SVD/Covariance.
     - [x] **Moore-Penrose Pseudoinverse**: Solving overdetermined systems via $A^+ = (A^T A)^{-1} A^T$.
-- [ ] **Numerical Stability & Performance**
+- [x] **Numerical Stability & Performance**
     - [x] **Adaptive Relative Tolerance** based on machine epsilon and matrix norms.
     - [x] **Stable SVD** via One-Sided Jacobi rotations (avoiding $A^T A$ precision loss).
     - [x] **Hessenberg Reduction** for $O(n^2)$ QR iteration acceleration.
     - [x] **Shifted QR Algorithm** with Wilkinson shifts and deflation logic.
-    - [ ] **In-place Householder Storage** and implicit $Q$ matrix construction.
+    - [x] **In-place Householder Storage** and implicit $Q$ matrix construction.
 - [ ] **Applications**
     - [ ] Image compression via Low-Rank Approximation (SVD).
     - [ ] Least Squares Regression using the Normal Equation.
