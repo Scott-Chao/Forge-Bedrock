@@ -38,8 +38,8 @@ Implement the core routines that power data transformation and dimensionality re
     - [x] **Shifted QR Algorithm** with Wilkinson shifts and deflation logic.
     - [x] **In-place Householder Storage** and implicit $Q$ matrix construction.
 - [ ] **Applications**
+    - [x] Least Squares Regression using the Normal Equation.
     - [ ] Image compression via Low-Rank Approximation (SVD).
-    - [ ] Least Squares Regression using the Normal Equation.
 
 ### Phase 2: Mini-Autograd (Computation Graph)
 - [ ] Design the `Tensor` class with `data` and `grad` attributes.
