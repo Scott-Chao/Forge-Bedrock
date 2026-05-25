@@ -13,3 +13,5 @@ env/
 .DS_Store
 data/
 
+assets/*
+!assets/pku_boya.jpg

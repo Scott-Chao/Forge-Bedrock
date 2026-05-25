@@ -37,9 +37,9 @@ Implement the core routines that power data transformation and dimensionality re
     - [x] **Hessenberg Reduction** for $O(n^2)$ QR iteration acceleration.
     - [x] **Shifted QR Algorithm** with Wilkinson shifts and deflation logic.
     - [x] **In-place Householder Storage** and implicit $Q$ matrix construction.
-- [ ] **Applications**
+- [x] **Applications**
     - [x] Least Squares Regression using the Normal Equation.
-    - [ ] Image compression via Low-Rank Approximation (SVD).
+    - [x] Image compression via Low-Rank Approximation (SVD).
 
 ### Phase 2: Mini-Autograd (Computation Graph)
 - [ ] Design the `Tensor` class with `data` and `grad` attributes.
