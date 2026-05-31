@@ -41,10 +41,39 @@ Implement the core routines that power data transformation and dimensionality re
     - [x] Least Squares Regression using the Normal Equation.
     - [x] Image compression via Low-Rank Approximation (SVD).
 
-### Phase 2: Mini-Autograd (Computation Graph)
-- [ ] Design the `Tensor` class with `data` and `grad` attributes.
-- [ ] Implement a Dynamic Computational Graph using topological sort.
-- [ ] Define `forward` and `backward` passes for basic operators (+, -, *, /, exp, log).
+### Phase 2: Mini-Autograd (Computation Graph & Neural Networks)
+Implement reverse-mode automatic differentiation (backpropagation) from scratch, inspired by Karpathy's micrograd. Starting from a scalar-level computational graph, then building a neural network library on top, with a regression demo to verify the full pipeline.
+- [ ] **Autograd Engine (`Value`)**
+    - [ ] Dynamic DAG construction via Python operator overloading (`__add__`, `__mul__`, etc.)
+    - [ ] Topological sort for correct backward propagation order
+    - [ ] Reverse-mode automatic differentiation (`.backward()`)
+    - [ ] Gradient accumulation across multiple backward calls
+    - [ ] Computation graph visualization (graphviz or textual DAG rendering)
+- [ ] **Core Operations with Backward Rules**
+    - [ ] Arithmetic: `+`, `-`, `*`, `/`, `**` (power), `neg`
+    - [ ] Activations: `relu`, `sigmoid`, `tanh`
+    - [ ] Transcendental: `exp`, `log`, `sqrt`
+    - [ ] (Stretch) `softmax` with stable log-sum-exp trick, `log_softmax`
+    - [ ] Numerical gradient verification via finite differences for every operation
+- [ ] **Neural Network Modules (`nn`)**
+    - [ ] `Parameter` class (a `Value` subclass marking trainable parameters)
+    - [ ] `Linear` layer (fully connected: $y = xW^T + b$) with proper shape handling
+    - [ ] Activation wrappers: `ReLU`, `Tanh`, `Sigmoid`
+    - [ ] `Sequential` container for composing multi-layer pipelines
+    - [ ] `Module` base class: `parameters()` iterator, `zero_grad()`, train/eval mode
+    - [ ] Weight initialization: Xavier/Glorot uniform, He/Kaiming uniform
+- [ ] **Loss (minimal, just enough for demos)**
+    - [ ] `MSELoss` — Mean Squared Error for regression tasks
+- [ ] **Training Utilities**
+    - [ ] Mini-batch iteration helpers (`DataLoader`-style batching)
+    - [ ] Metric tracking: running loss
+- [ ] **Verification & Correctness**
+    - [ ] Unit tests for every operation's forward and backward pass
+    - [ ] Numerical gradient checking against finite differences
+    - [ ] End-to-end: train a 2-layer MLP to convergence on a synthetic regression task
+- [ ] **Applications**
+    - [ ] Polynomial curve fitting via a small MLP
+    - [ ] Regression on a synthetic dataset (e.g., noisy sine wave)
 
 ### Phase 3: Probability, Statistics & Loss Functions
 - [ ] Implementation of core distributions (Gaussian, Bernoulli) via sampling.
