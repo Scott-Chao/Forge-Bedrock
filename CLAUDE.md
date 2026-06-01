@@ -18,10 +18,14 @@ forge-bedrock/
 │   ├── solvers.py        # Triangular solver, eigenvalue solver
 │   ├── pca.py            # PCA dimensionality reduction
 │   └── broadcast.py      # Custom broadcasting engine
+├── core/autograd/        # Reverse-mode autograd engine (Phase 2)
+│   ├── __init__.py
+│   └── value.py          # Value class with dynamic DAG construction
 ├── apps/                 # Application Jupyter Notebooks
 │   ├── image_compression.ipynb
 │   └── least_squares_regression.ipynb
-├── tests/linalg/         # pytest tests
+├── tests/linalg/         # pytest tests for linear algebra
+├── tests/autograd/       # pytest tests for autograd
 └── environment.yml       # conda environment
 ```
 

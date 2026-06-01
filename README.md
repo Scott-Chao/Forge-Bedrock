@@ -44,7 +44,7 @@ Implement the core routines that power data transformation and dimensionality re
 ### Phase 2: Mini-Autograd (Computation Graph & Neural Networks)
 Implement reverse-mode automatic differentiation (backpropagation) from scratch, inspired by Karpathy's micrograd. Starting from a scalar-level computational graph, then building a neural network library on top, with a regression demo to verify the full pipeline.
 - [ ] **Autograd Engine (`Value`)**
-    - [ ] Dynamic DAG construction via Python operator overloading (`__add__`, `__mul__`, etc.)
+    - [x] Dynamic DAG construction via Python operator overloading (`__add__`, `__mul__`, etc.)
     - [ ] Topological sort for correct backward propagation order
     - [ ] Reverse-mode automatic differentiation (`.backward()`)
     - [ ] Gradient accumulation across multiple backward calls
