@@ -52,9 +52,9 @@ Implement reverse-mode automatic differentiation (backpropagation) from scratch,
 - [ ] **Core Operations with Backward Rules**
     - [x] Arithmetic: `+`, `-`, `*`, `/`, `**` (power), `neg`
     - [x] Activations: `relu`, `sigmoid`, `tanh`
-    - [ ] Transcendental: `exp`, `log`, `sqrt`
+    - [x] Transcendental: `exp`, `log`, `sqrt`
     - [ ] (Stretch) `softmax` with stable log-sum-exp trick, `log_softmax`
-    - [ ] Numerical gradient verification via finite differences for every operation
+    - [x] Numerical gradient verification via finite differences for every operation
 - [ ] **Neural Network Modules (`nn`)**
     - [ ] `Parameter` class (a `Value` subclass marking trainable parameters)
     - [ ] `Linear` layer (fully connected: $y = xW^T + b$) with proper shape handling
@@ -67,9 +67,9 @@ Implement reverse-mode automatic differentiation (backpropagation) from scratch,
 - [ ] **Training Utilities**
     - [ ] Mini-batch iteration helpers (`DataLoader`-style batching)
     - [ ] Metric tracking: running loss
-- [ ] **Verification & Correctness**
-    - [ ] Unit tests for every operation's forward and backward pass
-    - [ ] Numerical gradient checking against finite differences
+- [x] **Verification & Correctness**
+    - [x] Unit tests for every operation's forward and backward pass
+    - [x] Numerical gradient checking against finite differences
     - [ ] End-to-end: train a 2-layer MLP to convergence on a synthetic regression task
 - [ ] **Applications**
     - [ ] Polynomial curve fitting via a small MLP

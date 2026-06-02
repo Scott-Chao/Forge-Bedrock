@@ -20,7 +20,9 @@ forge-bedrock/
 │   └── broadcast.py      # Custom broadcasting engine
 ├── core/autograd/        # Reverse-mode autograd engine (Phase 2)
 │   ├── __init__.py
-│   └── value.py          # Value class with dynamic DAG construction
+│   ├── value.py          # Value class with dynamic DAG construction
+│   ├── functional.py     # Activation & transcendental functions
+│   └── viz.py            # Computation graph visualization
 ├── apps/                 # Application Jupyter Notebooks
 │   ├── image_compression.ipynb
 │   └── least_squares_regression.ipynb

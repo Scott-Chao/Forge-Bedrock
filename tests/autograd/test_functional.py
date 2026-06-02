@@ -1,65 +1,163 @@
 import pytest
 import numpy as np
 
-from core.autograd import Value, relu, sigmoid, tanh
+from core.autograd import Value, relu, sigmoid, tanh, exp, log, sqrt
 
 
 def _numerical_grad(f, x, h=1e-6):
     return (f(x + h) - f(x - h)) / (2 * h)
 
 
-CASES = [
-    (relu, -1.0, 0.0, 0.0),
-    (relu, 0.0, 0.0, 0.0),
-    (relu, 2.0, 2.0, 1.0),
-    (sigmoid, 0.0, 0.5, 0.25),
-    (sigmoid, 100.0, 1.0, 1e-6),
-    (tanh, 0.0, 0.0, 1.0),
-    (tanh, 2.0, np.tanh(2), 0.0706508),
+# (name, fn, x, expected_data, expected_grad)
+FORWARD_BACKWARD_CASES = [
+    ("exp(1)", exp, 1.0, np.exp(1), np.exp(1)),
+    ("exp(0)", exp, 0.0, 1.0, 1.0),
+    ("exp(-2)", exp, -2.0, np.exp(-2), np.exp(-2)),
+    ("log(3)", log, 3.0, np.log(3), 1 / 3),
+    ("log(1)", log, 1.0, 0.0, 1.0),
+    ("log(0.5)", log, 0.5, np.log(0.5), 2.0),
+    ("sqrt(4)", sqrt, 4.0, 2.0, 0.25),
+    ("sqrt(0)", sqrt, 0.0, 0.0, np.inf),
+    ("sqrt(2)", sqrt, 2.0, np.sqrt(2), 0.5 / np.sqrt(2)),
+    ("relu(2)", relu, 2.0, 2.0, 1.0),
+    ("relu(-1)", relu, -1.0, 0.0, 0.0),
+    ("relu(0)", relu, 0.0, 0.0, 0.0),
+    ("sigmoid(0)", sigmoid, 0.0, 0.5, 0.25),
+    (
+        "sigmoid(2)",
+        sigmoid,
+        2.0,
+        1 / (1 + np.exp(-2)),
+        1 / (1 + np.exp(-2)) * (1 - 1 / (1 + np.exp(-2))),
+    ),
+    ("tanh(1)", tanh, 1.0, np.tanh(1), 1 - np.tanh(1) ** 2),
+    ("tanh(0)", tanh, 0.0, 0.0, 1.0),
 ]
 
+# =========================================================
+# 1. Forward correctness & DAG construction
+# =========================================================
 
-class TestActivations:
-    @pytest.mark.parametrize("fn, val, expected_fwd, expected_bwd", CASES)
-    def test_forward_and_backward(self, fn, val, expected_fwd, expected_bwd):
-        x = Value(val)
-        out = fn(x)
-        np.testing.assert_allclose(out.data, expected_fwd, atol=1e-6)
+
+class TestForward:
+    @pytest.mark.parametrize(
+        "name, fn, x, expected_data, _",
+        FORWARD_BACKWARD_CASES,
+        ids=[c[0] for c in FORWARD_BACKWARD_CASES],
+    )
+    def test_forward(self, name, fn, x, expected_data, _):
+        v = Value(x)
+        out = fn(v)
+        np.testing.assert_allclose(out.data, expected_data)
+        assert out._children == {v}
+
+    def test_chain_exp_log(self):
+        x = Value(3.0)
+        np.testing.assert_allclose(exp(log(x)).data, 3.0, atol=1e-12)
+
+
+# =========================================================
+# 2. Backward pass — analytical gradient verification
+# =========================================================
+
+
+class TestBackward:
+    @pytest.mark.parametrize(
+        "name, fn, x, _, expected_grad",
+        FORWARD_BACKWARD_CASES,
+        ids=[c[0] for c in FORWARD_BACKWARD_CASES],
+    )
+    def test_backward(self, name, fn, x, _, expected_grad):
+        v = Value(x)
+        fn(v).backward()
+        if np.isinf(expected_grad):
+            assert np.isinf(v.grad)
+        else:
+            np.testing.assert_allclose(v.grad, expected_grad, atol=1e-12)
+
+    def test_chain_rule_exp(self):
+        x = Value(1.5)
+        exp(2 * x).backward()
+        np.testing.assert_allclose(x.grad, 2 * np.exp(3.0))
+
+    def test_chain_rule_log(self):
+        x = Value(3.0)
+        log(x**2).backward()
+        np.testing.assert_allclose(x.grad, 2.0 / 3.0)
+
+
+# =========================================================
+# 3. Finite difference verification
+# =========================================================
+
+
+class TestAgainstFiniteDifference:
+    CASES = [
+        ("exp(1)", exp, np.exp, 1.0),
+        ("exp(-1)", exp, np.exp, -1.0),
+        ("log(2)", log, np.log, 2.0),
+        ("sqrt(3)", sqrt, np.sqrt, 3.0),
+        ("relu(1)", relu, lambda z: np.maximum(0, z), 1.0),
+        ("relu(-1)", relu, lambda z: np.maximum(0, z), -1.0),
+        ("sigmoid(0)", sigmoid, lambda z: 1 / (1 + np.exp(-z)), 0.0),
+        ("tanh(0.5)", tanh, np.tanh, 0.5),
+    ]
+
+    @pytest.mark.parametrize(
+        "name, fn, np_fn, x",
+        CASES,
+        ids=[c[0] for c in CASES],
+    )
+    def test_finite_diff(self, name, fn, np_fn, x):
+        v = Value(x)
+        fn(v).backward()
+        np.testing.assert_allclose(v.grad, _numerical_grad(np_fn, x), atol=1e-5)
+
+    CHAINED_CASES = [
+        ("exp(2x)", lambda v: exp(2 * v), lambda z: np.exp(2 * z), 0.5),
+        ("log(x^2)", lambda v: log(v**2), lambda z: np.log(z**2), 2.0),
+        ("sqrt(x^3)", lambda v: sqrt(v**3), lambda z: np.sqrt(z**3), 4.0),
+        (
+            "sigmoid(2x)",
+            lambda v: sigmoid(2 * v),
+            lambda z: 1 / (1 + np.exp(-2 * z)),
+            1.0,
+        ),
+        ("tanh(x^2)", lambda v: tanh(v**2), lambda z: np.tanh(z**2), 0.5),
+    ]
+
+    @pytest.mark.parametrize(
+        "name, val_fn, np_fn, x",
+        CHAINED_CASES,
+        ids=[c[0] for c in CHAINED_CASES],
+    )
+    def test_chained_finite_diff(self, name, val_fn, np_fn, x):
+        v = Value(x)
+        val_fn(v).backward()
+        np.testing.assert_allclose(v.grad, _numerical_grad(np_fn, x), atol=1e-5)
+
+
+# =========================================================
+# 4. Edge cases
+# =========================================================
+
+
+class TestEdgeCases:
+    def test_log_at_zero(self):
+        v = Value(0.0)
+        out = log(v)
+        assert np.isneginf(out.data)
+        with pytest.raises(ZeroDivisionError):
+            out.backward()
+
+    def test_exp_negative_large(self):
+        v = Value(-100.0)
+        out = exp(v)
+        assert out.data < 1e-43
         out.backward()
-        np.testing.assert_allclose(x.grad, expected_bwd, atol=1e-6)
+        assert v.grad < 1e-43
 
-    @pytest.mark.parametrize(
-        "fn, val",
-        [
-            (relu, 2.0),
-            (sigmoid, 0.5),
-            (tanh, 0.5),
-        ],
-    )
-    def test_against_finite_diff(self, fn, val):
-        x = Value(val)
-        fn(x).backward()
-
-        def f(v):
-            return fn(Value(v)).data
-
-        np.testing.assert_allclose(x.grad, _numerical_grad(f, val), atol=1e-5)
-
-    @pytest.mark.parametrize(
-        "expr, val",
-        [
-            ("tanh(relu(x))", 1.0),
-            ("relu(x) * x + sigmoid(x)", 2.0),
-        ],
-    )
-    def test_composed(self, expr, val):
-        x = Value(val)
-        y = eval(expr, {"x": x, "relu": relu, "sigmoid": sigmoid, "tanh": tanh})
-        y.backward()
-
-        def f(v):
-            return eval(
-                expr, {"x": Value(v), "relu": relu, "sigmoid": sigmoid, "tanh": tanh}
-            ).data
-
-        np.testing.assert_allclose(x.grad, _numerical_grad(f, val), atol=1e-5)
+    def test_exp_log_inverse(self):
+        x = Value(3.0)
+        exp(log(x)).backward()
+        np.testing.assert_allclose(x.grad, 1.0, atol=1e-12)
