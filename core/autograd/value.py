@@ -55,7 +55,6 @@ class Value:
         self._op = op
         self._backward = lambda: None
 
-
     def _ensure_value(self, other):
         """Wrap a Python scalar as a Value if it isn't one already.
 
@@ -69,10 +68,11 @@ class Value:
     def __add__(self, other):
         other = self._ensure_value(other)
         out = Value(self.data + other.data, (self, other), "+")
-        
+
         def _backward():
             self.grad += out.grad
             other.grad += out.grad
+
         out._backward = _backward
 
         return out
@@ -84,15 +84,17 @@ class Value:
         def _backward():
             self.grad += other.data * out.grad
             other.grad += self.data * out.grad
+
         out._backward = _backward
 
         return out
 
     def __pow__(self, other):
-        out = Value(self.data ** other, (self,), "**")
+        out = Value(self.data**other, (self,), "**")
 
         def _backward():
             self.grad += other * self.data ** (other - 1) * out.grad
+
         out._backward = _backward
 
         return out
@@ -116,22 +118,37 @@ class Value:
         return (-self) + other
 
     def __rtruediv__(self, other):
-        return self ** -1 * other
+        return self**-1 * other
+
+    @staticmethod
+    def _topological_sort(root: "Value"):
+        """
+        Produce a topological ordering of the DAG rooted at `root`.
+
+        Uses DFS: visit children first, then append the current node.
+        The returned list has parents *before* children, which is the
+        standard topological order.
+        """
+        visited = set()
+        order = []
+
+        def _dfs(node):
+            if node in visited:
+                return
+            visited.add(node)
+            for child in node._children:
+                _dfs(child)
+            order.append(node)
+
+        _dfs(root)
+        return order
 
     def backward(self):
-        """Kick off reverse-mode autograd from this node.
-
-        The full implementation requires:
-          1. Topological sort of the DAG (next roadmap item).
-          2. Traversing in reverse order, calling each node's _backward.
-          3. Gradient accumulation.
-
-        For now this is a placeholder.
-        """
-        # TODO: implement topological sort
-        # TODO: traverse in reverse order, calling _backward on each node
-        # HINT: self.grad should initialise to 1.0 (dself/dself = 1)
-        return NotImplemented
+        """Kick off reverse-mode autograd from this node."""
+        self.grad = 1.0
+        order = self._topological_sort(self)
+        for node in reversed(order):
+            node._backward()
 
     def __repr__(self):
         return f"Value(data={self.data}, grad={self.grad})"
