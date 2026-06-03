@@ -80,3 +80,51 @@ def sqrt(x: Value) -> Value:
 
     out._backward = _backward
     return out
+
+
+def softmax(x: Value) -> Value:
+    """
+    Softmax with stable log-sum-exp trick.
+
+    p_i = exp(x_i) / sum_j exp(x_j)
+
+    For numerical stability, subtract the max before exponentiating:
+    shifted = x - max(x)
+    p = exp(shifted) / sum(exp(shifted))
+
+    The backward (Jacobian-vector product):
+        ∂p_i / ∂x_j = p_i * (δ_ij - p_j)
+        grad_x = p * (grad_out - dot(p, grad_out))
+    """
+    shifted = x.data - np.max(x.data)
+    out_data = np.exp(shifted) / np.sum(np.exp(shifted))
+    out = Value(out_data, (x,), "Softmax")
+
+    def _backward():
+        x.grad += out_data * (out.grad - np.dot(out_data, out.grad))
+
+    out._backward = _backward
+    return out
+
+
+def log_softmax(x: Value) -> Value:
+    """
+    Log-softmax with stable log-sum-exp trick.
+
+    log(p_i) = x_i - log-sum-exp(x)
+
+    where log-sum-exp(x) = max(x) + log(sum(exp(x - max(x)))).
+
+    The backward (Jacobian-vector product):
+        ∂log(p_i) / ∂x_j = δ_ij - p_j
+        grad_x = grad_out - sum(grad_out) * p
+    """
+    log_sum_exp_x = np.max(x.data) + np.log(np.sum(np.exp(x.data - np.max(x.data))))
+    out_data = x.data - log_sum_exp_x
+    out = Value(out_data, (x,), "LogSoftmax")
+
+    def _backward():
+        x.grad += out.grad - np.sum(out.grad) * np.exp(out.data)
+
+    out._backward = _backward
+    return out

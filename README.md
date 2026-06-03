@@ -49,11 +49,11 @@ Implement reverse-mode automatic differentiation (backpropagation) from scratch,
     - [x] Reverse-mode automatic differentiation (`.backward()`)
     - [x] Gradient accumulation across multiple backward calls
     - [x] Computation graph visualization (graphviz or textual DAG rendering)
-- [ ] **Core Operations with Backward Rules**
+- [x] **Core Operations with Backward Rules**
     - [x] Arithmetic: `+`, `-`, `*`, `/`, `**` (power), `neg`
     - [x] Activations: `relu`, `sigmoid`, `tanh`
     - [x] Transcendental: `exp`, `log`, `sqrt`
-    - [ ] (Stretch) `softmax` with stable log-sum-exp trick, `log_softmax`
+    - [x] (Stretch) `softmax` with stable log-sum-exp trick, `log_softmax`
     - [x] Numerical gradient verification via finite differences for every operation
 - [ ] **Neural Network Modules (`nn`)**
     - [ ] `Parameter` class (a `Value` subclass marking trainable parameters)

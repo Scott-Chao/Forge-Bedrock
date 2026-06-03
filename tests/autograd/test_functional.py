@@ -1,7 +1,17 @@
 import pytest
 import numpy as np
 
-from core.autograd import Value, relu, sigmoid, tanh, exp, log, sqrt
+from core.autograd import (
+    Value,
+    relu,
+    sigmoid,
+    tanh,
+    exp,
+    log,
+    sqrt,
+    softmax,
+    log_softmax,
+)
 
 
 def _numerical_grad(f, x, h=1e-6):
@@ -161,3 +171,101 @@ class TestEdgeCases:
         x = Value(3.0)
         exp(log(x)).backward()
         np.testing.assert_allclose(x.grad, 1.0, atol=1e-12)
+
+
+# =========================================================
+# 5. Softmax & Log-Softmax
+# =========================================================
+
+
+def _stable_softmax_ref(x: np.ndarray) -> np.ndarray:
+    """NumPy reference softmax (stable)."""
+    shifted = x - np.max(x)
+    e = np.exp(shifted)
+    return e / np.sum(e)
+
+
+LOGITS = np.array([1.0, 2.0, 3.0])
+UPSTREAM = np.array([0.5, -0.2, 0.3])
+
+
+class TestSoftmaxForward:
+    def test_correct_values(self):
+        p = softmax(Value(LOGITS))
+        np.testing.assert_allclose(np.sum(p.data), 1.0)
+        np.testing.assert_allclose(p.data, _stable_softmax_ref(LOGITS), atol=1e-12)
+
+    def test_dag(self):
+        x = Value(LOGITS)
+        p = softmax(x)
+        assert p._op == "Softmax"
+        assert p._children == {x}
+
+    @pytest.mark.parametrize(
+        "x, desc",
+        [
+            (np.array([2.0, 2.0, 2.0]), "uniform"),
+            (np.array([5.0]), "single"),
+            (np.array([800.0, 801.0, 802.0]), "large positive"),
+        ],
+    )
+    def test_edge_cases(self, x, desc):
+        p = softmax(Value(x)).data
+        np.testing.assert_allclose(np.sum(p), 1.0)
+        assert not np.any(np.isnan(p))
+        assert not np.any(np.isinf(p))
+
+
+class TestLogSoftmaxForward:
+    def test_correct_values(self):
+        lp = log_softmax(Value(LOGITS))
+        expected = np.log(_stable_softmax_ref(LOGITS))
+        np.testing.assert_allclose(lp.data, expected, atol=1e-12)
+
+    def test_dag(self):
+        x = Value(LOGITS)
+        lp = log_softmax(x)
+        assert lp._op == "LogSoftmax"
+        assert lp._children == {x}
+
+
+class TestSoftmaxBackward:
+    def test_analytical(self):
+        x = Value(LOGITS.copy())
+        p = softmax(x)
+        p.grad = UPSTREAM.copy()
+        p._backward()
+        p_data = p.data
+        expected = p_data * (UPSTREAM - np.dot(p_data, UPSTREAM))
+        np.testing.assert_allclose(x.grad, expected, atol=1e-12)
+
+    def test_accumulation(self):
+        x = Value(LOGITS.copy())
+        p = softmax(x)
+        p.grad = UPSTREAM.copy()
+        x.grad = np.ones_like(LOGITS)  # pre-existing grad
+        p._backward()
+        first = x.grad.copy()
+        p._backward()
+        np.testing.assert_allclose(x.grad, first + (first - 1.0), atol=1e-12)
+
+
+class TestLogSoftmaxBackward:
+    def test_analytical(self):
+        x = Value(LOGITS.copy())
+        lp = log_softmax(x)
+        lp.grad = UPSTREAM.copy()
+        lp._backward()
+        p = np.exp(lp.data)
+        expected = UPSTREAM - np.sum(UPSTREAM) * p
+        np.testing.assert_allclose(x.grad, expected, atol=1e-12)
+
+    def test_accumulation(self):
+        x = Value(LOGITS.copy())
+        lp = log_softmax(x)
+        lp.grad = UPSTREAM.copy()
+        x.grad = np.ones_like(LOGITS) * 100.0  # pre-existing grad
+        lp._backward()
+        first = x.grad.copy()
+        lp._backward()
+        np.testing.assert_allclose(x.grad, first + (first - 100.0), atol=1e-12)
