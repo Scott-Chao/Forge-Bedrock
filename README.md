@@ -56,7 +56,7 @@ Implement reverse-mode automatic differentiation (backpropagation) from scratch,
     - [x] (Stretch) `softmax` with stable log-sum-exp trick, `log_softmax`
     - [x] Numerical gradient verification via finite differences for every operation
 - [ ] **Neural Network Modules (`nn`)**
-    - [ ] `Parameter` class (a `Value` subclass marking trainable parameters)
+    - [x] `Parameter` class (a `Value` subclass marking trainable parameters)
     - [ ] `Linear` layer (fully connected: $y = xW^T + b$) with proper shape handling
     - [ ] Activation wrappers: `ReLU`, `Tanh`, `Sigmoid`
     - [ ] `Sequential` container for composing multi-layer pipelines
