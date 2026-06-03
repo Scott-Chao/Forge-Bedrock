@@ -217,7 +217,114 @@ class TestEdgeCases:
         with pytest.raises(ZeroDivisionError):
             _ = Value(1.0) / Value(0.0)
 
-    def test_gradient_accumulation(self):
+    def test_gradient_confluence(self):
+        """Single backward — gradients from multiple paths sum at shared leaf."""
         a = Value(2.0)
         (a + a).backward()
         assert a.grad == 2.0  # da/da from both branches = 1 + 1
+
+
+# =========================================================
+# 5. Multiple backward calls — gradient accumulation
+# =========================================================
+
+
+class TestGradientAccumulation:
+    """Calling backward() multiple times accumulates gradients on leaves."""
+
+    def test_single_op_accumulates(self):
+        """c = a * b  →  two backward() calls double leaf grads."""
+        a, b = Value(2.0), Value(3.0)
+        c = a * b
+
+        c.backward()
+        assert a.grad == 3.0
+        assert b.grad == 2.0
+
+        c.backward()
+        assert a.grad == 6.0  # 3 + 3
+        assert b.grad == 4.0  # 2 + 2
+
+    def test_chain_accumulates_correctly(self):
+        """e = (a * b) + d  →  multi-node chain avoids stale intermediate grads."""
+        a, b = Value(2.0), Value(3.0)
+        x = a * b
+        d = Value(5.0)
+        e = x + d
+
+        # First backward
+        e.backward()
+        np.testing.assert_allclose(a.grad, 3.0)
+        np.testing.assert_allclose(b.grad, 2.0)
+        np.testing.assert_allclose(d.grad, 1.0)
+
+        # Second backward — must NOT leak stale x.grad
+        e.backward()
+        np.testing.assert_allclose(a.grad, 6.0)  # 3 + 3
+        np.testing.assert_allclose(b.grad, 4.0)  # 2 + 2
+        np.testing.assert_allclose(d.grad, 2.0)  # 1 + 1
+
+    def test_three_backward_calls(self):
+        a = Value(2.0)
+        b = Value(3.0)
+        c = a * b
+
+        c.backward()
+        c.backward()
+        c.backward()
+
+        assert a.grad == 9.0  # 3 * 3
+        assert b.grad == 6.0  # 3 * 2
+
+    def test_intermediate_grad_reset(self):
+        """Intermediate node grads are zeroed before each backward pass."""
+        a, b = Value(2.0), Value(3.0)
+        x = a * b
+        d = Value(5.0)
+        e = x + d
+
+        e.backward()
+        assert e.grad == 1.0
+        assert x.grad == 1.0
+
+        e.backward()
+        assert e.grad == 1.0, "root is reset each time"
+        assert x.grad == 1.0, "intermediate must not accumulate across calls"
+
+    def test_reused_variable_accumulates(self):
+        """y = x * x + x  →  two backward() calls double leaf grads."""
+        x = Value(3.0)
+        y = x * x + x
+
+        y.backward()
+        np.testing.assert_allclose(x.grad, 7.0)  # 2*3 + 1
+
+        y.backward()
+        np.testing.assert_allclose(x.grad, 14.0)  # 7 + 7
+
+    def test_deep_chain_accumulation(self):
+        """y = ((a + b) * c) / d  →  deeper chain."""
+        a, b, c, d = Value(2.0), Value(3.0), Value(4.0), Value(2.0)
+        y = ((a + b) * c) / d
+
+        y.backward()
+        np.testing.assert_allclose(a.grad, 2.0)  # c/d = 4/2 = 2
+        np.testing.assert_allclose(b.grad, 2.0)
+
+        y.backward()
+        np.testing.assert_allclose(a.grad, 4.0)  # 2 + 2
+        np.testing.assert_allclose(b.grad, 4.0)
+
+    def test_accumulation_matches_finite_difference(self):
+        """After N backward calls, accumulated grads match N×finite-diff."""
+        a_val, b_val, c_val = 2.0, 3.0, 5.0
+
+        a, b, c = Value(a_val), Value(b_val), Value(c_val)
+        y = a * b + c
+
+        for _ in range(3):
+            y.backward()
+
+        assert a.grad == b_val * 3  # 3 calls × b
+        assert b.grad == a_val * 3  # 3 calls × a
+        assert c.grad == 1.0 * 3  # 3 calls × 1

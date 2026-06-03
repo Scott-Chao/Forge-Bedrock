@@ -15,7 +15,7 @@ Phase 2 uses raw NumPy ndarrays (not the Matrix class from Phase 1).
 
 from __future__ import annotations
 
-from typing import Optional, Set, Tuple
+from typing import Tuple
 
 
 class Value:
@@ -145,8 +145,11 @@ class Value:
 
     def backward(self):
         """Kick off reverse-mode autograd from this node."""
-        self.grad = 1.0
         order = self._topological_sort(self)
+        for node in order:
+            if node._op:
+                node.grad = 0.0
+        self.grad = 1.0
         for node in reversed(order):
             node._backward()
 

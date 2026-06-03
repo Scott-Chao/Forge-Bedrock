@@ -47,7 +47,7 @@ Implement reverse-mode automatic differentiation (backpropagation) from scratch,
     - [x] Dynamic DAG construction via Python operator overloading (`__add__`, `__mul__`, etc.)
     - [x] Topological sort for correct backward propagation order
     - [x] Reverse-mode automatic differentiation (`.backward()`)
-    - [ ] Gradient accumulation across multiple backward calls
+    - [x] Gradient accumulation across multiple backward calls
     - [ ] Computation graph visualization (graphviz or textual DAG rendering)
 - [ ] **Core Operations with Backward Rules**
     - [ ] Arithmetic: `+`, `-`, `*`, `/`, `**` (power), `neg`
