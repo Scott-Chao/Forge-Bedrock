@@ -453,3 +453,104 @@ class TestMatMul:
         y.backward(np.ones_like(y.data))
         assert x.grad.shape == (N, d_in)
         assert W.grad.shape == (d_out, d_in)
+
+
+# =========================================================
+# 7. Broadcasting — Expand node and broadcast ops
+# =========================================================
+
+
+class TestExpandTo:
+    """Direct tests of Value._expand_to — forward values and backward sums."""
+
+    @pytest.mark.parametrize(
+        "original, target",
+        [
+            ((5,), (3, 4, 5)),  # extra leading dims
+            ((3, 1, 5), (3, 4, 5)),  # size-1 dim replicated
+            ((1, 5), (4, 5)),  # both leading + replicate
+            ((), (4,)),  # scalar to 1d
+        ],
+    )
+    def test_expand_forward_and_backward(self, original, target):
+        rng = np.random.default_rng(42)
+        x = Value(rng.normal(0, 1, original))
+        expanded = x._expand_to(target)
+
+        # Forward
+        np.testing.assert_allclose(expanded.data, np.broadcast_to(x.data, target))
+        assert expanded._op == "expand"
+
+        # Backward — sum of ones collapsed to original shape
+        expanded.backward(np.ones(target))
+        expected = np.ones(target)
+        for _ in range(len(target) - len(original)):
+            expected = expected.sum(axis=0)
+        for d in range(len(original)):
+            if original[d] == 1:
+                expected = expected.sum(axis=d, keepdims=True)
+        expected = expected.reshape(original)
+        np.testing.assert_allclose(x.grad, expected)
+
+
+class TestBroadcastOps:
+    """Broadcast via __add__ / __mul__ — forward values and gradient shapes."""
+
+    @pytest.mark.parametrize(
+        "a_shape, b_shape",
+        [
+            ((4, 3), (3,)),  # vector broadcast
+            ((3, 1), (1, 4)),  # both need expand
+            ((5, 1), (3, 1, 4)),  # 2d + 3d
+        ],
+    )
+    @pytest.mark.parametrize("op", ["+", "*"])
+    def test_forward_matches_numpy(self, op, a_shape, b_shape):
+        rng = np.random.default_rng(42)
+        a_data = rng.normal(0, 1, a_shape)
+        b_data = rng.normal(0, 1, b_shape)
+        a, b = Value(a_data.copy()), Value(b_data.copy())
+        out = a + b if op == "+" else a * b
+        ref = a_data + b_data if op == "+" else a_data * b_data
+        np.testing.assert_allclose(out.data, ref)
+
+    @pytest.mark.parametrize(
+        "a_shape, b_shape",
+        [
+            ((4, 3), (3,)),
+            ((3, 1), (1, 4)),
+            ((5, 1), (3, 1, 4)),
+            ((), (4, 3)),  # scalar + matrix via _ensure_value
+        ],
+    )
+    @pytest.mark.parametrize("op", ["+", "*"])
+    def test_gradient_shapes(self, op, a_shape, b_shape):
+        rng = np.random.default_rng(42)
+        a_data = rng.normal(0, 1, a_shape)
+        b_data = rng.normal(0, 1, b_shape)
+        a, b = Value(a_data.copy()), Value(b_data.copy())
+        out = a + b if op == "+" else a * b
+        out.backward(np.ones_like(out.data))
+        assert a.grad.shape == a_shape
+        assert b.grad.shape == b_shape
+
+    def test_gradient_values_match_finite_difference(self):
+        """y = a + b with broadcasting [3,1] + [1,4]."""
+        rng = np.random.default_rng(42)
+        a_data = rng.normal(0, 1, (3, 1))
+        b_data = rng.normal(0, 1, (1, 4))
+        a, b = Value(a_data.copy()), Value(b_data.copy())
+        out = a + b
+        out.backward(np.ones_like(out.data))
+
+        def f_a(a_mat):
+            return (a_mat + b_data).sum()
+
+        expected_a = _numerical_grad_array(f_a, a_data)
+        np.testing.assert_allclose(a.grad, expected_a, atol=1e-6)
+
+        def f_b(b_mat):
+            return (a_data + b_mat).sum()
+
+        expected_b = _numerical_grad_array(f_b, b_data)
+        np.testing.assert_allclose(b.grad, expected_b, atol=1e-6)

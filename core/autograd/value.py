@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from typing import Tuple
 
+import numpy as np
+
 
 class Value:
     """A node in a dynamic computation graph that supports autograd.
@@ -65,8 +67,54 @@ class Value:
             return Value(other)
         return other
 
+    def _expand_to(self, target_shape):
+        """Return a new Value whose data is broadcast to `target_shape`.
+
+        Forward:  self.data is "stretched" to target_shape by replicating
+                  elements along dimensions where the original size is 1,
+                  or by inserting new leading dimensions.
+
+        Backward: The gradient must be reduced back to the original shape.
+                  This is the inverse of replication — sum along every axis
+                  that was added or repeated.
+
+        Parameters
+        ----------
+        target_shape : tuple of int
+            The shape to broadcast to.
+        """
+        out = Value(np.broadcast_to(self.data, target_shape), (self,), "expand")
+
+        def _backward():
+            grad = out.grad
+            # Collapse extra leading dims created by broadcasting
+            while grad.ndim > self.data.ndim:
+                grad = np.sum(grad, axis=0)
+            # Collapse dims where original size == 1 (was replicated)
+            for d in range(self.data.ndim):
+                if self.data.shape[d] == 1 and grad.shape[d] != 1:
+                    grad = np.sum(grad, axis=d, keepdims=True)
+            self.grad += grad.reshape(self.data.shape)
+
+        out._backward = _backward
+
+        return out
+
+    @staticmethod
+    def _broadcast_pair(a: "Value", b: "Value") -> tuple["Value", "Value"]:
+        """Broadcast two Values to a common shape for element-wise ops."""
+        a_data = np.asarray(a.data)
+        b_data = np.asarray(b.data)
+        target_shape = np.broadcast_shapes(a_data.shape, b_data.shape)
+        if a_data.shape != target_shape:
+            a = a._expand_to(target_shape)
+        if b_data.shape != target_shape:
+            b = b._expand_to(target_shape)
+        return a, b
+
     def __add__(self, other):
         other = self._ensure_value(other)
+        self, other = self._broadcast_pair(self, other)
         out = Value(self.data + other.data, (self, other), "+")
 
         def _backward():
@@ -79,6 +127,7 @@ class Value:
 
     def __mul__(self, other):
         other = self._ensure_value(other)
+        self, other = self._broadcast_pair(self, other)
         out = Value(self.data * other.data, (self, other), "*")
 
         def _backward():
