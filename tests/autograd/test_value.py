@@ -5,8 +5,20 @@ from core.autograd import Value
 
 
 def _numerical_grad(f, x, h=1e-6):
-    """Central-difference approximation of df/dx at x."""
+    """Central-difference approximation of df/dx at x (scalar x, scalar output)."""
     return (f(x + h) - f(x - h)) / (2 * h)
+
+
+def _numerical_grad_array(f, x0, h=1e-6):
+    """Central-difference for f: R^n → scalar, at x0 (ndarray)."""
+    grad = np.zeros_like(x0)
+    for idx in np.ndindex(x0.shape):
+        x_plus = x0.copy()
+        x_minus = x0.copy()
+        x_plus[idx] += h
+        x_minus[idx] -= h
+        grad[idx] = (f(x_plus) - f(x_minus)) / (2 * h)
+    return grad
 
 
 # =========================================================
@@ -328,3 +340,116 @@ class TestGradientAccumulation:
         assert a.grad == b_val * 3  # 3 calls × b
         assert b.grad == a_val * 3  # 3 calls × a
         assert c.grad == 1.0 * 3  # 3 calls × 1
+
+
+# =========================================================
+# 6. Matrix operations — .T and @
+# =========================================================
+
+
+class TestTranspose:
+    """Value.T — forward and backward correctness."""
+
+    def test_forward_transpose_2d(self):
+        x = Value(np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]))
+        xt = x.T
+        np.testing.assert_array_equal(
+            xt.data, np.array([[1.0, 4.0], [2.0, 5.0], [3.0, 6.0]])
+        )
+        assert xt._op == "T"
+        assert x in xt._children
+
+    def test_gradient_transposes_back(self):
+        x = Value(np.array([[1.0, 2.0], [3.0, 4.0]]))
+        xt = x.T
+        # Use ones as initial gradient (equivalent to "loss = sum(output)")
+        xt.backward(np.ones_like(xt.data))
+        np.testing.assert_array_equal(x.grad, np.ones((2, 2)))
+
+    def test_transpose_chained(self):
+        """(X.T).T == X, and gradients match."""
+        x = Value(np.array([[1.0, 2.0], [3.0, 4.0]]))
+        xtt = (x.T).T
+        xtt.backward(np.ones_like(xtt.data))
+        np.testing.assert_array_equal(x.grad, np.ones((2, 2)))
+
+    def test_against_finite_difference(self):
+        rng = np.random.default_rng(42)
+        X = rng.normal(0, 1, (3, 4))
+        x = Value(X.copy())
+
+        xt = x.T
+        xt.backward(np.ones_like(xt.data))
+
+        def f(X_mat):
+            return X_mat.T.sum()
+
+        expected = _numerical_grad_array(f, X)
+        np.testing.assert_allclose(x.grad, expected, atol=1e-6)
+
+
+class TestMatMul:
+    """Value @ Value — matrix multiplication forward and backward."""
+
+    @pytest.fixture
+    def rng(self):
+        return np.random.default_rng(42)
+
+    def test_forward(self, rng):
+        A = rng.normal(0, 1, (3, 4))
+        B = rng.normal(0, 1, (4, 5))
+        a, b = Value(A.copy()), Value(B.copy())
+        out = a @ b
+        np.testing.assert_allclose(out.data, A @ B)
+        assert out._op == "@"
+
+    def test_backward_grads_have_correct_shapes(self, rng):
+        A = rng.normal(0, 1, (3, 4))
+        B = rng.normal(0, 1, (4, 5))
+        a, b = Value(A.copy()), Value(B.copy())
+        out = a @ b
+        out.backward(np.ones_like(out.data))
+        assert a.grad.shape == (3, 4)
+        assert b.grad.shape == (4, 5)
+
+    def test_backward_values(self, rng):
+        A = rng.normal(0, 1, (2, 3))
+        B = rng.normal(0, 1, (3, 2))
+        a, b = Value(A.copy()), Value(B.copy())
+        out = a @ b
+        out.backward(np.ones_like(out.data))
+        # d(sum(A @ B)) / dA = ones @ B.T = sum over columns of B, broadcast
+        np.testing.assert_allclose(a.grad, np.ones((2, 2)) @ B.T)
+        np.testing.assert_allclose(b.grad, A.T @ np.ones((2, 2)))
+
+    def test_against_finite_difference(self, rng):
+        A = rng.normal(0, 1, (2, 3))
+        B = rng.normal(0, 1, (3, 2))
+        a, b = Value(A.copy()), Value(B.copy())
+        out = a @ b
+        out.backward(np.ones_like(out.data))
+
+        def f_A(A_mat):
+            return (A_mat @ B).sum()
+
+        expected_a = _numerical_grad_array(f_A, A)
+        np.testing.assert_allclose(a.grad, expected_a, atol=1e-6)
+
+        def f_B(B_mat):
+            return (A @ B_mat).sum()
+
+        expected_b = _numerical_grad_array(f_B, B)
+        np.testing.assert_allclose(b.grad, expected_b, atol=1e-6)
+
+    def test_transpose_and_matmul_chain(self, rng):
+        """y = x @ W.T  (the Linear-layer pattern)."""
+        N, d_in, d_out = 4, 3, 2
+        x_data = rng.normal(0, 1, (N, d_in))
+        W_data = rng.normal(0, 1, (d_out, d_in))
+        x = Value(x_data.copy())
+        W = Value(W_data.copy())
+        y = x @ W.T
+        np.testing.assert_allclose(y.data, x_data @ W_data.T)
+        y.backward(np.ones_like(y.data))
+        assert x.grad.shape == (N, d_in)
+        assert W.grad.shape == (d_out, d_in)

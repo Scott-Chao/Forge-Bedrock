@@ -143,15 +143,49 @@ class Value:
         _dfs(root)
         return order
 
-    def backward(self):
-        """Kick off reverse-mode autograd from this node."""
+    def backward(self, gradient=None):
+        """Kick off reverse-mode autograd from this node.
+
+        Parameters
+        ----------
+        gradient : Value-compatible type, optional
+            The initial gradient.  Required when the output is non-scalar
+            (e.g. a matrix).  For scalar outputs, defaults to 1.0, matching
+            PyTorch's convention that backward() on a scalar needs no argument.
+        """
         order = self._topological_sort(self)
         for node in order:
             if node._op:
                 node.grad = 0.0
-        self.grad = 1.0
+        if gradient is None:
+            self.grad = 1.0
+        else:
+            self.grad = gradient
         for node in reversed(order):
             node._backward()
+
+    @property
+    def T(self):
+        out = Value(self.data.T, (self,), "T")
+
+        def _backward():
+            self.grad += out.grad.T
+
+        out._backward = _backward
+
+        return out
+
+    def __matmul__(self, other):
+        other = self._ensure_value(other)
+        out = Value(self.data @ other.data, (self, other), "@")
+
+        def _backward():
+            self.grad += out.grad @ other.data.T
+            other.grad += self.data.T @ out.grad
+
+        out._backward = _backward
+
+        return out
 
     def __repr__(self):
         return f"Value(data={self.data}, grad={self.grad})"

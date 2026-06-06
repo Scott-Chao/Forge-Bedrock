@@ -57,7 +57,7 @@ Implement reverse-mode automatic differentiation (backpropagation) from scratch,
     - [x] Numerical gradient verification via finite differences for every operation
 - [ ] **Neural Network Modules (`nn`)**
     - [x] `Parameter` class (a `Value` subclass marking trainable parameters)
-    - [ ] `Linear` layer (fully connected: $y = xW^T + b$) with proper shape handling
+    - [x] `Linear` layer (fully connected: $y = xW^T + b$) with proper shape handling
     - [ ] Activation wrappers: `ReLU`, `Tanh`, `Sigmoid`
     - [ ] `Sequential` container for composing multi-layer pipelines
     - [ ] `Module` base class: `parameters()` iterator, `zero_grad()`, train/eval mode

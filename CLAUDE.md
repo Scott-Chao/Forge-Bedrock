@@ -23,6 +23,10 @@ forge-bedrock/
 │   ├── value.py          # Value class with dynamic DAG construction
 │   ├── functional.py     # Activation & transcendental functions
 │   └── viz.py            # Computation graph visualization
+├── core/nn/              # Neural network modules (Phase 2)
+│   ├── __init__.py
+│   ├── parameter.py      # Parameter class (trainable Value subclass)
+│   └── linear.py         # Fully-connected (Linear) layer
 ├── apps/                 # Application Jupyter Notebooks
 │   ├── image_compression.ipynb
 │   └── least_squares_regression.ipynb
