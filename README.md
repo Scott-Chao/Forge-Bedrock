@@ -60,7 +60,7 @@ Implement reverse-mode automatic differentiation (backpropagation) from scratch,
     - [x] `Linear` layer (fully connected: $y = xW^T + b$) with proper shape handling
     - [x] Activation wrappers: `ReLU`, `Tanh`, `Sigmoid`
     - [x] `Sequential` container for composing multi-layer pipelines
-    - [ ] `Module` base class: `parameters()` iterator, `zero_grad()`, train/eval mode
+    - [x] `Module` base class: `parameters()` iterator, `zero_grad()`, train/eval mode
     - [ ] Weight initialization: Xavier/Glorot uniform, He/Kaiming uniform
 - [ ] **Loss (minimal, just enough for demos)**
     - [ ] `MSELoss` — Mean Squared Error for regression tasks

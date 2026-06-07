@@ -10,8 +10,10 @@ or forward), which is true of all layers in core.nn (Linear, ReLU,
 Tanh, Sigmoid, and later Loss modules).
 """
 
+from core.nn.module import Module
 
-class Sequential:
+
+class Sequential(Module):
     """A sequential container for composing layers into a pipeline.
 
     Layers are applied in the order they are passed.
@@ -24,20 +26,15 @@ class Sequential:
     """
 
     def __init__(self, layers: list):
-        self.layers = layers
+        super().__init__()
+        object.__setattr__(self, "layers", layers)
+        for i, layer in enumerate(layers):
+            setattr(self, str(i), layer)
 
     def forward(self, x):
-        for layer in self.layers:
+        for layer in self._modules.values():
             x = layer(x)
         return x
-
-    def parameters(self):
-        for layer in self.layers:
-            if hasattr(layer, "parameters"):
-                yield from layer.parameters()
-
-    def __call__(self, x):
-        return self.forward(x)
 
     def __repr__(self):
         layers_str = "\n".join(

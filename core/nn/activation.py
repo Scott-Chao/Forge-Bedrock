@@ -7,49 +7,50 @@ used interchangeably in a Sequential pipeline.
 """
 
 from core.autograd import functional as F
+from core.nn.module import Module
 
 
-class ReLU:
+class ReLU(Module):
     """Rectified Linear Unit activation: max(0, x)."""
+
+    def __init__(self):
+        super().__init__()
 
     def forward(self, x):
         return F.relu(x)
-
-    def __call__(self, x):
-        return self.forward(x)
 
     def __repr__(self):
         return "ReLU()"
 
 
-class Tanh:
+class Tanh(Module):
     """Hyperbolic tangent activation: (e^x - e^-x) / (e^x + e^-x)
 
     Output range: (-1, 1)
     """
 
+    def __init__(self):
+        super().__init__()
+
     def forward(self, x):
         return F.tanh(x)
-
-    def __call__(self, x):
-        return self.forward(x)
 
     def __repr__(self):
         return "Tanh()"
 
 
-class Sigmoid:
+class Sigmoid(Module):
     """Logistic sigmoid activation: 1 / (1 + e^-x)
 
     Output range: (0, 1).  Commonly used in the output layer for
     binary classification.
     """
 
+    def __init__(self):
+        super().__init__()
+
     def forward(self, x):
         return F.sigmoid(x)
-
-    def __call__(self, x):
-        return self.forward(x)
 
     def __repr__(self):
         return "Sigmoid()"

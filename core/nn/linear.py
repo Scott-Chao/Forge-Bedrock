@@ -13,9 +13,10 @@ by PyTorch's torch.nn.Linear.
 import numpy as np
 
 from core.nn.parameter import Parameter
+from core.nn.module import Module
 
 
-class Linear:
+class Linear(Module):
     """A fully connected layer: y = x @ W.T + b.
 
     Parameters
@@ -36,6 +37,7 @@ class Linear:
     """
 
     def __init__(self, in_features: int, out_features: int, bias: bool = True):
+        super().__init__()
         self.weight = Parameter(np.random.uniform(-1, 1, (out_features, in_features)))
         if bias:
             self.bias = Parameter(np.random.uniform(-1, 1, (out_features,)))
@@ -47,14 +49,6 @@ class Linear:
         if self.bias is not None:
             y += self.bias
         return y
-
-    def parameters(self):
-        yield self.weight
-        if self.bias is not None:
-            yield self.bias
-
-    def __call__(self, x):
-        return self.forward(x)
 
     def __repr__(self):
         return f"Linear(in={self.weight.data.shape[1]}, out={self.weight.data.shape[0]}, bias={self.bias is not None})"
