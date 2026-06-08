@@ -25,13 +25,18 @@ forge-bedrock/
 │   └── viz.py            # Computation graph visualization
 ├── core/nn/              # Neural network modules (Phase 2)
 │   ├── __init__.py
+│   ├── activation.py     # ReLU, Tanh, Sigmoid layer wrappers
+│   ├── init.py           # Xavier/Glorot & He/Kaiming weight init
+│   ├── linear.py         # Fully-connected (Linear) layer
+│   ├── module.py         # Module base class (parameter registration)
 │   ├── parameter.py      # Parameter class (trainable Value subclass)
-│   └── linear.py         # Fully-connected (Linear) layer
+│   └── sequential.py     # Sequential container for layer pipelines
 ├── apps/                 # Application Jupyter Notebooks
 │   ├── image_compression.ipynb
 │   └── least_squares_regression.ipynb
 ├── tests/linalg/         # pytest tests for linear algebra
 ├── tests/autograd/       # pytest tests for autograd
+├── tests/nn/             # pytest tests for neural network modules
 └── environment.yml       # conda environment
 ```
 
