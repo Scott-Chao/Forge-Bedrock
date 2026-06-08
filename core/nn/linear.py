@@ -10,10 +10,13 @@ a bias vector of shape (out_features,).  This is the same convention used
 by PyTorch's torch.nn.Linear.
 """
 
+import math
+
 import numpy as np
 
-from core.nn.parameter import Parameter
+from core.nn.init import kaiming_uniform_
 from core.nn.module import Module
+from core.nn.parameter import Parameter
 
 
 class Linear(Module):
@@ -38,11 +41,19 @@ class Linear(Module):
 
     def __init__(self, in_features: int, out_features: int, bias: bool = True):
         super().__init__()
-        self.weight = Parameter(np.random.uniform(-1, 1, (out_features, in_features)))
+        self.weight = Parameter(np.empty((out_features, in_features)))
         if bias:
-            self.bias = Parameter(np.random.uniform(-1, 1, (out_features,)))
+            self.bias = Parameter(np.empty((out_features,)))
         else:
             self.bias = None
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        kaiming_uniform_(self.weight)
+        if self.bias is not None:
+            fan_in = self.weight.data.shape[1]
+            bound = 1 / math.sqrt(fan_in)
+            self.bias.data = np.random.uniform(-bound, bound, size=self.bias.data.shape)
 
     def forward(self, x):
         y = x @ self.weight.T

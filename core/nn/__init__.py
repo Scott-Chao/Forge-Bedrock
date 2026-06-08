@@ -1,4 +1,5 @@
 from .activation import ReLU, Tanh, Sigmoid
+from .init import kaiming_uniform_, xavier_uniform_
 from .linear import Linear
 from .module import Module
 from .parameter import Parameter
@@ -12,4 +13,6 @@ __all__ = [
     "Sequential",
     "Sigmoid",
     "Tanh",
+    "kaiming_uniform_",
+    "xavier_uniform_",
 ]

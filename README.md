@@ -55,13 +55,13 @@ Implement reverse-mode automatic differentiation (backpropagation) from scratch,
     - [x] Transcendental: `exp`, `log`, `sqrt`
     - [x] (Stretch) `softmax` with stable log-sum-exp trick, `log_softmax`
     - [x] Numerical gradient verification via finite differences for every operation
-- [ ] **Neural Network Modules (`nn`)**
+- [x] **Neural Network Modules (`nn`)**
     - [x] `Parameter` class (a `Value` subclass marking trainable parameters)
     - [x] `Linear` layer (fully connected: $y = xW^T + b$) with proper shape handling
     - [x] Activation wrappers: `ReLU`, `Tanh`, `Sigmoid`
     - [x] `Sequential` container for composing multi-layer pipelines
     - [x] `Module` base class: `parameters()` iterator, `zero_grad()`, train/eval mode
-    - [ ] Weight initialization: Xavier/Glorot uniform, He/Kaiming uniform
+    - [x] Weight initialization: Xavier/Glorot uniform, He/Kaiming uniform
 - [ ] **Loss (minimal, just enough for demos)**
     - [ ] `MSELoss` — Mean Squared Error for regression tasks
 - [ ] **Training Utilities**
