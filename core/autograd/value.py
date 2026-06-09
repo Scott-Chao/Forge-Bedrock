@@ -87,14 +87,15 @@ class Value:
 
         def _backward():
             grad = out.grad
+            orig_data = np.asarray(self.data)
             # Collapse extra leading dims created by broadcasting
-            while grad.ndim > self.data.ndim:
+            while grad.ndim > orig_data.ndim:
                 grad = np.sum(grad, axis=0)
             # Collapse dims where original size == 1 (was replicated)
-            for d in range(self.data.ndim):
-                if self.data.shape[d] == 1 and grad.shape[d] != 1:
+            for d in range(orig_data.ndim):
+                if orig_data.shape[d] == 1 and grad.shape[d] != 1:
                     grad = np.sum(grad, axis=d, keepdims=True)
-            self.grad += grad.reshape(self.data.shape)
+            self.grad += grad.reshape(orig_data.shape)
 
         out._backward = _backward
 
