@@ -554,3 +554,81 @@ class TestBroadcastOps:
 
         expected_b = _numerical_grad_array(f_b, b_data)
         np.testing.assert_allclose(b.grad, expected_b, atol=1e-6)
+
+
+# =========================================================
+# 8. Reduction — sum() and mean()
+# =========================================================
+
+
+class TestSum:
+    @pytest.mark.parametrize(
+        "data",
+        [
+            np.array(5.0),  # scalar
+            np.array([1.0, 2.0, 3.0]),  # 1-D
+            np.array([[1.0, 2.0], [3.0, 4.0]]),  # 2-D
+        ],
+    )
+    def test_forward(self, data):
+        v = Value(data.copy())
+        out = v.sum()
+        np.testing.assert_allclose(out.data, np.sum(data))
+
+    @pytest.mark.parametrize(
+        "data", [np.array([1.0, 2.0, 3.0]), np.array([[1.0, 2.0], [3.0, 4.0]])]
+    )
+    def test_gradient_ones(self, data):
+        v = Value(data.copy())
+        s = v.sum()
+        s.backward()
+        np.testing.assert_array_equal(v.grad, np.ones_like(data))
+
+    def test_against_finite_difference(self):
+        rng = np.random.default_rng(42)
+        x = rng.normal(0, 1, (3, 4))
+        v = Value(x.copy())
+        v.sum().backward()
+
+        def f(x_mat):
+            return x_mat.sum()
+
+        expected = _numerical_grad_array(f, x)
+        np.testing.assert_allclose(v.grad, expected, atol=1e-6)
+
+
+class TestMean:
+    @pytest.mark.parametrize(
+        "data",
+        [
+            np.array(5.0),
+            np.array([1.0, 2.0, 3.0]),
+            np.array([[1.0, 2.0], [3.0, 4.0]]),
+        ],
+    )
+    def test_forward(self, data):
+        v = Value(data.copy())
+        out = v.mean()
+        np.testing.assert_allclose(out.data, np.mean(data))
+
+    @pytest.mark.parametrize(
+        "data", [np.array([1.0, 2.0, 3.0]), np.array([[1.0, 2.0], [3.0, 4.0]])]
+    )
+    def test_gradient_one_over_n(self, data):
+        v = Value(data.copy())
+        m = v.mean()
+        m.backward()
+        N = data.size
+        np.testing.assert_allclose(v.grad, np.ones_like(data) / N)
+
+    def test_against_finite_difference(self):
+        rng = np.random.default_rng(42)
+        x = rng.normal(0, 1, (2, 5))
+        v = Value(x.copy())
+        v.mean().backward()
+
+        def f(x_mat):
+            return x_mat.mean()
+
+        expected = _numerical_grad_array(f, x)
+        np.testing.assert_allclose(v.grad, expected, atol=1e-6)

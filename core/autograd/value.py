@@ -214,6 +214,26 @@ class Value:
         for node in reversed(order):
             node._backward()
 
+    def sum(self):
+        out = Value(np.sum(self.data), (self,), "sum")
+
+        def _backward():
+            self.grad += np.ones_like(self.data) * out.grad
+
+        out._backward = _backward
+
+        return out
+
+    def mean(self):
+        out = Value(np.mean(self.data), (self,), "mean")
+
+        def _backward():
+            self.grad += np.ones_like(self.data) * out.grad / self.data.size
+
+        out._backward = _backward
+
+        return out
+
     @property
     def T(self):
         out = Value(self.data.T, (self,), "T")

@@ -28,6 +28,7 @@ forge-bedrock/
 │   ├── activation.py     # ReLU, Tanh, Sigmoid layer wrappers
 │   ├── init.py           # Xavier/Glorot & He/Kaiming weight init
 │   ├── linear.py         # Fully-connected (Linear) layer
+│   ├── loss.py           # MSELoss for regression tasks
 │   ├── module.py         # Module base class (parameter registration)
 │   ├── parameter.py      # Parameter class (trainable Value subclass)
 │   └── sequential.py     # Sequential container for layer pipelines

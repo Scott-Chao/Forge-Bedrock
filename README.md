@@ -62,8 +62,8 @@ Implement reverse-mode automatic differentiation (backpropagation) from scratch,
     - [x] `Sequential` container for composing multi-layer pipelines
     - [x] `Module` base class: `parameters()` iterator, `zero_grad()`, train/eval mode
     - [x] Weight initialization: Xavier/Glorot uniform, He/Kaiming uniform
-- [ ] **Loss (minimal, just enough for demos)**
-    - [ ] `MSELoss` — Mean Squared Error for regression tasks
+- [x] **Loss (minimal, just enough for demos)**
+    - [x] `MSELoss` — Mean Squared Error for regression tasks
 - [ ] **Training Utilities**
     - [ ] Mini-batch iteration helpers (`DataLoader`-style batching)
     - [ ] Metric tracking: running loss
