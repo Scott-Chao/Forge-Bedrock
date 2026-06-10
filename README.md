@@ -64,17 +64,12 @@ Implement reverse-mode automatic differentiation (backpropagation) from scratch,
     - [x] Weight initialization: Xavier/Glorot uniform, He/Kaiming uniform
 - [x] **Loss (minimal, just enough for demos)**
     - [x] `MSELoss` — Mean Squared Error for regression tasks
-- [ ] **Training Utilities**
+- [x] **Training Utilities**
     - [x] Mini-batch iteration helpers (`DataLoader`-style batching)
     - [x] SGD optimizer (parameter update with learning rate)
-    - [ ] Metric tracking: running loss
-- [x] **Verification & Correctness**
-    - [x] Unit tests for every operation's forward and backward pass
-    - [x] Numerical gradient checking against finite differences
-    - [ ] End-to-end: train a 2-layer MLP to convergence on a synthetic regression task
 - [ ] **Applications**
+    - [ ] End-to-end: train a 2-layer MLP to convergence on a synthetic regression task
     - [ ] Polynomial curve fitting via a small MLP
-    - [ ] Regression on a synthetic dataset (e.g., noisy sine wave)
 
 ### Phase 3: Probability, Statistics & Loss Functions
 - [ ] Implementation of core distributions (Gaussian, Bernoulli) via sampling.
