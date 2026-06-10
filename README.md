@@ -66,6 +66,7 @@ Implement reverse-mode automatic differentiation (backpropagation) from scratch,
     - [x] `MSELoss` — Mean Squared Error for regression tasks
 - [ ] **Training Utilities**
     - [x] Mini-batch iteration helpers (`DataLoader`-style batching)
+    - [x] SGD optimizer (parameter update with learning rate)
     - [ ] Metric tracking: running loss
 - [x] **Verification & Correctness**
     - [x] Unit tests for every operation's forward and backward pass
