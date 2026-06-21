@@ -67,9 +67,8 @@ Implement reverse-mode automatic differentiation (backpropagation) from scratch,
 - [x] **Training Utilities**
     - [x] Mini-batch iteration helpers (`DataLoader`-style batching)
     - [x] SGD optimizer (parameter update with learning rate)
-- [ ] **Applications**
-    - [ ] End-to-end: train a 2-layer MLP to convergence on a synthetic regression task
-    - [ ] Polynomial curve fitting via a small MLP
+- [x] **Applications**
+    - [x] End-to-end: train a 2-layer MLP to convergence on a synthetic regression task
 
 ### Phase 3: Probability, Statistics & Loss Functions
 - [ ] Implementation of core distributions (Gaussian, Bernoulli) via sampling.
