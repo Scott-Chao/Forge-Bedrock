@@ -71,9 +71,23 @@ Implement reverse-mode automatic differentiation (backpropagation) from scratch,
     - [x] End-to-end: train a 2-layer MLP to convergence on a synthetic regression task
 
 ### Phase 3: Probability, Statistics & Loss Functions
-- [ ] Implementation of core distributions (Gaussian, Bernoulli) via sampling.
-- [ ] Information Theory metrics: Entropy, Cross-Entropy, and KL Divergence.
-- [ ] Maximum Likelihood Estimation (MLE) simulations.
+Empirical distribution → theoretical distributions → information theory → bias-variance → MLE → loss functions → classification demos.
+- [ ] **Probability Distributions**
+    - [ ] Empirical distribution: histogram estimation from raw data
+    - [ ] Theoretical: Gaussian (Box-Muller sampling), Bernoulli, Categorical, Laplacian
+    - [ ] Visualizing PDFs/PMFs with varying parameters
+- [ ] **Information Theory & Bias-Variance**
+    - [ ] Entropy, KL Divergence, Cross-Entropy — computing all three on synthetic distributions
+    - [ ] Bias-Variance Decomposition: $\mathbb{E}[(y-\hat{f})^2] = \text{Bias}^2 + \text{Var} + \sigma^2$, connecting loss choice to model behavior
+- [ ] **MLE → Loss Functions**
+    - [ ] Likelihood → Negative Log-Likelihood → Loss (the general pattern)
+    - [ ] Derive each: Gaussian→MSE, Laplacian→L1, Bernoulli→BCE, Categorical→CrossEntropy; Huber as pragmatic design
+    - [ ] Implement on autograd: `BCELoss`, `CrossEntropyLoss` (fused Softmax+NLL), `L1Loss`, `HuberLoss`
+    - [ ] Numerical gradient verification for each new loss
+- [ ] **Applications**
+    - [ ] Binary classification on the moons dataset (with BCE)
+    - [ ] Multi-class classification on synthetic blobs (with CrossEntropy)
+    - [ ] Comparing MSE vs L1 vs Huber on regression with outliers
 
 ### Phase 4: Optimization & Training Logic
 - [ ] Stochastic Gradient Descent (SGD) and Momentum.
