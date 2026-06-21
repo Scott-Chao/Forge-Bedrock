@@ -26,15 +26,18 @@ forge-bedrock/
 ├── core/nn/              # Neural network modules (Phase 2)
 │   ├── __init__.py
 │   ├── activation.py     # ReLU, Tanh, Sigmoid layer wrappers
+│   ├── data.py           # DataLoader mini-batch iteration
 │   ├── init.py           # Xavier/Glorot & He/Kaiming weight init
 │   ├── linear.py         # Fully-connected (Linear) layer
 │   ├── loss.py           # MSELoss for regression tasks
 │   ├── module.py         # Module base class (parameter registration)
+│   ├── optim.py          # SGD optimizer
 │   ├── parameter.py      # Parameter class (trainable Value subclass)
 │   └── sequential.py     # Sequential container for layer pipelines
 ├── apps/                 # Application Jupyter Notebooks
 │   ├── image_compression.ipynb
-│   └── least_squares_regression.ipynb
+│   ├── least_squares_regression.ipynb
+│   └── mlp_regression.ipynb
 ├── tests/linalg/         # pytest tests for linear algebra
 ├── tests/autograd/       # pytest tests for autograd
 ├── tests/nn/             # pytest tests for neural network modules
