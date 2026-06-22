@@ -34,6 +34,9 @@ forge-bedrock/
 │   ├── optim.py          # SGD optimizer
 │   ├── parameter.py      # Parameter class (trainable Value subclass)
 │   └── sequential.py     # Sequential container for layer pipelines
+├── core/prob/            # Probability & statistics (Phase 3)
+│   ├── __init__.py
+│   └── empirical.py      # Empirical distribution & histogram estimation
 ├── apps/                 # Application Jupyter Notebooks
 │   ├── image_compression.ipynb
 │   ├── least_squares_regression.ipynb
@@ -41,6 +44,7 @@ forge-bedrock/
 ├── tests/linalg/         # pytest tests for linear algebra
 ├── tests/autograd/       # pytest tests for autograd
 ├── tests/nn/             # pytest tests for neural network modules
+├── tests/prob/           # pytest tests for probability & statistics
 └── environment.yml       # conda environment
 ```
 
