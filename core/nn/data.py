@@ -6,6 +6,8 @@ mini-batches, with optional shuffling, following the same
 iterator pattern as PyTorch's DataLoader.
 """
 
+from __future__ import annotations
+
 import numpy as np
 
 
@@ -39,19 +41,19 @@ class DataLoader:
         self.indices = np.arange(len(X))
         self._pos = 0
 
-    def __iter__(self):
+    def __iter__(self) -> DataLoader:
         self._pos = 0
         if self.shuffle:
             np.random.shuffle(self.indices)
         return self
 
-    def __next__(self):
+    def __next__(self) -> tuple[np.ndarray, np.ndarray]:
         if self._pos >= len(self.indices):
             raise StopIteration
         idx = self.indices[self._pos : self._pos + self.batch_size]
         self._pos += self.batch_size
         return self.X[idx], self.y[idx]
 
-    def __len__(self):
+    def __len__(self) -> int:
         """Number of batches per epoch."""
         return (len(self.X) + self.batch_size - 1) // self.batch_size

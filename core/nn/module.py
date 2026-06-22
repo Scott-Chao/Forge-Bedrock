@@ -8,6 +8,10 @@ and train/eval mode toggling.
 Inspired by PyTorch's torch.nn.Module.
 """
 
+from __future__ import annotations
+
+from typing import Iterator
+
 from core.nn.parameter import Parameter
 
 
@@ -20,34 +24,38 @@ class Module:
     parameters() and zero_grad() work recursively.
     """
 
-    def __init__(self):
+    _parameters: dict[str, Parameter]
+    _modules: dict[str, Module]
+    _training: bool
+
+    def __init__(self) -> None:
         object.__setattr__(self, "_parameters", {})
         object.__setattr__(self, "_modules", {})
         object.__setattr__(self, "_training", True)
 
-    def __setattr__(self, name, value):
+    def __setattr__(self, name: str, value: object) -> None:
         if isinstance(value, Parameter):
             self._parameters[name] = value
         elif isinstance(value, Module):
             self._modules[name] = value
         object.__setattr__(self, name, value)
 
-    def parameters(self):
+    def parameters(self) -> Iterator[Parameter]:
         for p in self._parameters.values():
             yield p
         for m in self._modules.values():
             yield from m.parameters()
 
-    def zero_grad(self):
+    def zero_grad(self) -> None:
         for p in self.parameters():
             p.grad = 0.0
 
-    def train(self, mode=True):
+    def train(self, mode: bool = True) -> None:
         self._training = mode
         for m in self._modules.values():
             m.train(mode)
 
-    def eval(self):
+    def eval(self) -> None:
         """Set the module to evaluation mode (no dropout, fixed batchnorm, etc.)."""
         return self.train(False)
 

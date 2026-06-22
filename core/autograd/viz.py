@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-from typing import List, Set, Tuple
-
 from .value import Value
 
 
-def trace(root: Value) -> Tuple[List[Value], List[Tuple[Value, Value]]]:
+def trace(root: Value) -> tuple[list[Value], list[tuple[Value, Value]]]:
     """Walk the DAG and collect topologically sorted nodes and (parent, child) edges."""
-    nodes: List[Value] = []
-    edges: List[Tuple[Value, Value]] = []
-    visited: Set[int] = set()
+    nodes: list[Value] = []
+    edges: list[tuple[Value, Value]] = []
+    visited: set[int] = set()
 
-    def dfs(v: Value):
+    def dfs(v: Value) -> None:
         if id(v) in visited:
             return
         visited.add(id(v))
@@ -28,10 +26,10 @@ def trace(root: Value) -> Tuple[List[Value], List[Tuple[Value, Value]]]:
 
 def render_text(root: Value) -> str:
     """Render the computation graph as an indented tree using box-drawing characters."""
-    lines: List[str] = []
-    visited: Set[int] = set()
+    lines: list[str] = []
+    visited: set[int] = set()
 
-    def _render(node: Value, prefix: str = "", is_last: bool = True):
+    def _render(node: Value, prefix: str = "", is_last: bool = True) -> None:
         if id(node) in visited:
             return
         visited.add(id(node))
@@ -57,7 +55,7 @@ def draw_dot(
     filename: str = "computation_graph",
     format: str = "svg",
     direction: str = "TB",
-):
+) -> None:
     """Render the computation graph using Graphviz."""
     try:
         from graphviz import Digraph
@@ -70,10 +68,9 @@ def draw_dot(
     dot = Digraph(filename=filename, format=format)
     dot.attr(rankdir=direction)
 
-    seen: Set[int] = set()
     for n in nodes:
         nid = str(id(n))
-        label = f'<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
+        label = '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
         op_label = n._op if n._op else "input"
         label += f"<TR><TD>{op_label}</TD></TR>"
         label += f"<TR><TD>data={n.data}</TD></TR>"

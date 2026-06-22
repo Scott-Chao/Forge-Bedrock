@@ -1,17 +1,19 @@
+from __future__ import annotations
+
 import numpy as np
 from .matrix import Matrix
 from .decompositions import SVD
 
 
 class PCA:
-    def __init__(self, n_components):
+    def __init__(self, n_components: int) -> None:
         self.n_components = n_components
         self.components = None
         self.mean = None
         self.singular_values = None
         self.explained_variance_ratio = None
 
-    def fit(self, X):
+    def fit(self, X: Matrix) -> PCA:
         n_samples = X.rows
         self.mean = np.mean(X.data, axis=0)
         X_centered = X.data - self.mean
@@ -29,9 +31,9 @@ class PCA:
 
         return self
 
-    def transform(self, X):
+    def transform(self, X: Matrix) -> Matrix:
         X_centered = X.data - self.mean
         return Matrix(X_centered @ self.components.data.T)
 
-    def inverse_transform(self, X_reduced):
+    def inverse_transform(self, X_reduced: Matrix) -> Matrix:
         return Matrix(X_reduced.data @ self.components.data + self.mean)

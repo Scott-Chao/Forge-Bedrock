@@ -10,6 +10,10 @@ or forward), which is true of all layers in core.nn (Linear, ReLU,
 Tanh, Sigmoid, and later Loss modules).
 """
 
+from __future__ import annotations
+
+from collections.abc import Callable
+
 from core.nn.module import Module
 
 
@@ -17,15 +21,9 @@ class Sequential(Module):
     """A sequential container for composing layers into a pipeline.
 
     Layers are applied in the order they are passed.
-
-    Parameters
-    ----------
-    layers : list of callable
-        The layers/modules to compose, in order.  Each layer must be
-        callable with signature layer(x) -> output tensor.
     """
 
-    def __init__(self, layers: list):
+    def __init__(self, layers: list[Callable]) -> None:
         super().__init__()
         object.__setattr__(self, "layers", layers)
         for i, layer in enumerate(layers):
@@ -36,14 +34,14 @@ class Sequential(Module):
             x = layer(x)
         return x
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         layers_str = "\n".join(
             f"  ({i}): {layer}" for i, layer in enumerate(self.layers)
         )
         return f"Sequential(\n{layers_str}\n)"
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Callable:
         return self.layers[idx]
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.layers)

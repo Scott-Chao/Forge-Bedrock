@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import numpy as np
 from .matrix import Matrix
 
 
 class TriangularSolver:
     @staticmethod
-    def solve_lower(L, B):
+    def solve_lower(L: Matrix, B: Matrix) -> Matrix:
         """Solve LY = B (L is lower triangular)"""
         n = L.rows
 
@@ -21,7 +23,7 @@ class TriangularSolver:
         return Matrix(Y)
 
     @staticmethod
-    def solve_upper(U, Y):
+    def solve_upper(U: Matrix, Y: Matrix) -> Matrix:
         """Solve UX = Y (U is upper triangular)"""
         n = U.rows
 
@@ -39,7 +41,7 @@ class TriangularSolver:
 
 
 class EigenSolver:
-    def __init__(self, matrix):
+    def __init__(self, matrix: Matrix) -> None:
         self.matrix = matrix
         self.n = matrix.rows
         if matrix.rows != matrix.cols:
@@ -49,7 +51,7 @@ class EigenSolver:
 
         self.tol = get_adaptive_tol(matrix.data)
 
-    def power_iteration(self, max_iter=1000):
+    def power_iteration(self, max_iter: int = 1000) -> tuple[float, Matrix]:
         """
         Power Iteration: find the dominant eigenvalue and corresponding eigenvector.
         :return: (eigenvalue, eigenvector)
@@ -71,7 +73,9 @@ class EigenSolver:
 
         return last_eigenvalue, Matrix(b_k)
 
-    def find_all_eigen(self, method="wilkinson", max_iter=1000):
+    def find_all_eigen(
+        self, method: str = "wilkinson", max_iter: int = 1000
+    ) -> tuple[np.ndarray, Matrix]:
         if method == "qr":
             return self._find_all_eigen_qr(max_iter)
         elif method == "hessenberg":
@@ -81,7 +85,7 @@ class EigenSolver:
         else:
             raise ValueError(f"Unknown method: {method}")
 
-    def _find_all_eigen_qr(self, max_iter=1000):
+    def _find_all_eigen_qr(self, max_iter: int = 1000) -> tuple[np.ndarray, Matrix]:
         """
         Find all eigenvalues and eigenvectors using QR Algorithm.
         next_A = R @ Q = Q.T @ A @ Q
@@ -105,7 +109,9 @@ class EigenSolver:
 
         return np.diag(curr_A), Matrix(V)
 
-    def _find_all_eigen_hessenberg(self, max_iter=1000):
+    def _find_all_eigen_hessenberg(
+        self, max_iter: int = 1000
+    ) -> tuple[np.ndarray, Matrix]:
         """
         Find all eigenvalues and eigenvectors using QR Algorithm accelerated by Hessenberg reduction.
         """
@@ -116,7 +122,9 @@ class EigenSolver:
         eigenvectors = schur.Q
         return eigenvalues, eigenvectors
 
-    def _find_all_eigen_wilkinson(self, max_iter=1000):
+    def _find_all_eigen_wilkinson(
+        self, max_iter: int = 1000
+    ) -> tuple[np.ndarray, Matrix]:
         """Find all eigenvalues and eigenvectors using Hessenberg reduction + Wilkinson Shift + Deflation."""
         from .decompositions import Schur
 

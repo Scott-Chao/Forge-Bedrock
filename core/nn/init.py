@@ -18,7 +18,7 @@ import numpy as np
 from core.nn.parameter import Parameter
 
 
-def xavier_uniform_(param: Parameter, gain: float = 1.0):
+def xavier_uniform_(param: Parameter, gain: float = 1.0) -> None:
     """Fill `param` with values from a uniform distribution.
 
     Uses the Xavier/Glorot recipe:
@@ -46,7 +46,7 @@ def xavier_uniform_(param: Parameter, gain: float = 1.0):
     param.data = np.random.uniform(-a, a, size=param.data.shape)
 
 
-def kaiming_uniform_(param: Parameter, gain: float = 1.0):
+def kaiming_uniform_(param: Parameter, gain: float = 1.0) -> None:
     """Fill `param` with values from a uniform distribution.
 
     Uses the He/Kaiming recipe (designed for ReLU activations).

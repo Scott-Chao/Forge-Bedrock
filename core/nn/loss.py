@@ -6,6 +6,9 @@ with a consistent interface, so it can be used seamlessly in
 training loops alongside other nn components.
 """
 
+from __future__ import annotations
+
+from core.autograd import Value
 from core.nn.module import Module
 
 
@@ -23,11 +26,10 @@ class MSELoss(Module):
     handled automatically by the computation graph.
     """
 
-    def forward(self, prediction, target):
-        N = prediction.data.size
+    def forward(self, prediction: Value, target: Value) -> Value:
         diff = prediction - target
         squared = diff**2
         return squared.mean()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "MSELoss()"

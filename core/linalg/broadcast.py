@@ -1,16 +1,26 @@
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+
 import numpy as np
+
+if TYPE_CHECKING:
+    from .matrix import Matrix
 
 
 class BroadcastEngine:
     @staticmethod
-    def _get_strides(shape):
+    def _get_strides(shape: tuple[int, ...]) -> tuple[int, ...]:
         strides = [1] * len(shape)
         for i in range(len(shape) - 2, -1, -1):
             strides[i] = strides[i + 1] * shape[i + 1]
         return tuple(strides)
 
     @staticmethod
-    def _get_config(matrix1, matrix2):
+    def _get_config(
+        matrix1: Matrix, matrix2: Matrix
+    ) -> tuple[tuple[int, ...], tuple[int, ...], tuple[int, ...]]:
         s1, s2 = matrix1.shape, matrix2.shape
         ndim = max(len(s1), len(s2))
 
@@ -33,7 +43,12 @@ class BroadcastEngine:
         return tuple(target_shape), tuple(strides1), tuple(strides2)
 
     @staticmethod
-    def execute(matrix1, matrix2, op, out_data=None):
+    def execute(
+        matrix1: Matrix,
+        matrix2: Matrix,
+        op: Callable[..., np.ndarray],
+        out_data: np.ndarray | None = None,
+    ) -> np.ndarray:
         target_shape, st1, st2 = BroadcastEngine._get_config(matrix1, matrix2)
         if out_data is None:
             out_data = np.empty(target_shape, dtype=matrix1.data.dtype)
@@ -45,7 +60,7 @@ class BroadcastEngine:
         f1, f2, fr = matrix1.data.ravel(), matrix2.data.ravel(), out_data.ravel()
         ndim = len(target_shape)
 
-        def _worker(dim, off1, off2, off_r):
+        def _worker(dim: int, off1: int, off2: int, off_r: int) -> None:
             if dim == ndim - 1:
                 size = target_shape[dim]
                 idx1 = np.arange(size) * st1[dim] + off1

@@ -1,16 +1,18 @@
+from __future__ import annotations
+
 import numpy as np
 from .matrix import Matrix
 from .solvers import TriangularSolver
 
 
-def get_adaptive_tol(A_data):
+def get_adaptive_tol(A_data: np.ndarray) -> float:
     eps = np.finfo(A_data.dtype).eps
     norm_a = np.linalg.norm(A_data, ord=np.inf)
     return max(A_data.shape) * norm_a * eps
 
 
 class LU:
-    def __init__(self, matrix, fail_on_singular=True):
+    def __init__(self, matrix: Matrix, fail_on_singular: bool = True) -> None:
         if matrix.rows != matrix.cols:
             raise ValueError("LU Decomposition requires a square matrix.")
 
@@ -19,7 +21,7 @@ class LU:
         self.fail_on_singular = fail_on_singular
         self.P, self.L, self.U = self._decompose()
 
-    def _decompose(self):
+    def _decompose(self) -> tuple[Matrix, Matrix, Matrix]:
         n = self.n
         P = np.eye(n)
         L = np.eye(n)
@@ -45,7 +47,7 @@ class LU:
 
         return Matrix(P), Matrix(L), Matrix(U)
 
-    def solve(self, B):
+    def solve(self, B: Matrix | np.ndarray) -> Matrix:
         if not isinstance(B, Matrix):
             B = Matrix(B)
 
@@ -56,14 +58,14 @@ class LU:
 
 
 class Cholesky:
-    def __init__(self, matrix):
+    def __init__(self, matrix: Matrix) -> None:
         if not matrix.is_symmetric:
             raise ValueError("Matrix must be symmetric for Cholesky Decomposition.")
         self.matrix = matrix
         self.n = matrix.rows
         self.L = self._decompose()
 
-    def _decompose(self):
+    def _decompose(self) -> Matrix:
         n = self.n
         A = self.matrix.data
         L = np.zeros((n, n))
@@ -84,7 +86,7 @@ class Cholesky:
 
         return Matrix(L)
 
-    def solve(self, B):
+    def solve(self, B: Matrix | np.ndarray) -> Matrix:
         if not isinstance(B, Matrix):
             B = Matrix(B)
 
@@ -94,7 +96,7 @@ class Cholesky:
 
 
 class QR:
-    def __init__(self, matrix):
+    def __init__(self, matrix: Matrix) -> None:
         self.matrix = matrix
         self.n, self.m = matrix.rows, matrix.cols
         self.data = matrix.data.copy().astype(np.float64)
@@ -102,7 +104,7 @@ class QR:
         self.tol = get_adaptive_tol(matrix.data)
         self._decompose()
 
-    def _decompose(self):
+    def _decompose(self) -> None:
         """
         QR Decomposition by Householder Transformations.
         v = x + sign(x[0]) * ||x|| * e_1
@@ -140,12 +142,12 @@ class QR:
                 A_sub[1:, :] -= self.betas[k] * np.outer(self.data[k + 1 :, k], v_dot_A)
 
     @property
-    def R(self):
+    def R(self) -> Matrix:
         R = np.triu(self.data)
         return Matrix(R)
 
     @property
-    def Q(self):
+    def Q(self) -> Matrix:
         n = self.n
         Q = np.eye(n)
 
@@ -166,7 +168,7 @@ class QR:
 
 
 class Hessenberg:
-    def __init__(self, matrix):
+    def __init__(self, matrix: Matrix) -> None:
         self.matrix = matrix
         self.n = matrix.rows
         self.data = matrix.data.copy().astype(np.float64)
@@ -176,7 +178,7 @@ class Hessenberg:
             raise ValueError("Hessenberg requires a square matrix.")
         self._decompose()
 
-    def _decompose(self):
+    def _decompose(self) -> None:
         """
         Reduce A to Upper Hessenberg form H using Householder reflections.
         H = Q.T @ A @ Q
@@ -216,12 +218,12 @@ class Hessenberg:
             sub_H_right[:, 1:] -= beta * np.outer(v_dot_H_right, v_remaining)
 
     @property
-    def H(self):
+    def H(self) -> Matrix:
         H = np.triu(self.data, -1)
         return Matrix(H)
 
     @property
-    def Q(self):
+    def Q(self) -> Matrix:
         n = self.n
         Q = np.eye(n)
 
@@ -238,14 +240,16 @@ class Hessenberg:
 
 
 class Schur:
-    def __init__(self, matrix, max_iter=1000, use_shifts=True):
+    def __init__(
+        self, matrix: Matrix, max_iter: int = 1000, use_shifts: bool = True
+    ) -> None:
         self.matrix = matrix
         self.max_iter = max_iter
         self.use_shifts = use_shifts
         self.tol = get_adaptive_tol(matrix.data)
         self.T, self.Q = self._decompose()
 
-    def _decompose(self):
+    def _decompose(self) -> tuple[Matrix, Matrix]:
         hess = Hessenberg(self.matrix)
         T = hess.H.data.copy()
         Q = hess.Q.data.copy()
@@ -286,14 +290,16 @@ class Schur:
         return Matrix(T), Matrix(Q)
 
     @staticmethod
-    def generate_givens(a, b):
+    def generate_givens(a: float, b: float) -> tuple[float, float]:
         """Compute cosine and sine for Givens rotations."""
         if b == 0:
             return 1.0, 0.0
         r = np.hypot(a, b)
         return a / r, b / r
 
-    def _qr_step_givens(self, H, Q_total):
+    def _qr_step_givens(
+        self, H: np.ndarray, Q_total: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Perform one QR step on a Hessenberg matrix using Givens rotations."""
         n = H.shape[0]
         rotations = []
@@ -316,7 +322,9 @@ class Schur:
 
         return H, Q_total
 
-    def _get_wilkinson_shift(self, a11, a12, a21, a22):
+    def _get_wilkinson_shift(
+        self, a11: float, a12: float, a21: float, a22: float
+    ) -> float:
         """"""
         d = (a11 - a22) / 2.0
         disc = d**2 + a12 * a21
@@ -330,13 +338,19 @@ class Schur:
 
 
 class SVD:
-    def __init__(self, matrix, method="jacobi", full_matrices=True, **kwargs):
+    def __init__(
+        self,
+        matrix: Matrix,
+        method: str = "jacobi",
+        full_matrices: bool = True,
+        **kwargs: float,
+    ) -> None:
         self.matrix = matrix
         self.tol = get_adaptive_tol(matrix.data)
         self.full_matrices = full_matrices
         self.U, self.S, self.VT = self._decompose(method, **kwargs)
 
-    def _decompose(self, method, **kwargs):
+    def _decompose(self, method: str, **kwargs: float) -> tuple[Matrix, Matrix, Matrix]:
         A_raw = self.matrix.data
         m, n = A_raw.shape
         is_wide = m < n
@@ -373,7 +387,9 @@ class SVD:
 
         return Matrix(U), Matrix(Sigma), Matrix(VT)
 
-    def _decompose_tall_qr(self, A):
+    def _decompose_tall_qr(
+        self, A: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         m, n = A.shape
         ATA = A.T @ A
         eigenvalues, V_mat = Matrix(ATA).eig()
@@ -393,7 +409,9 @@ class SVD:
 
         return U, singular_values, V.T
 
-    def _decompose_tall_jacobi(self, A, max_sweeps):
+    def _decompose_tall_jacobi(
+        self, A: np.ndarray, max_sweeps: int
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Stable SVD via One-Sided Jacobi Rotations"""
         A = A.copy()
         m, n = A.shape
@@ -439,7 +457,9 @@ class SVD:
 
         return U, singular_values, V.T
 
-    def _orthogonal_completion(self, U_partial, target_cols):
+    def _orthogonal_completion(
+        self, U_partial: np.ndarray, target_cols: int
+    ) -> np.ndarray:
         m = U_partial.shape[0]
         k = U_partial.shape[1]
         if k >= target_cols:

@@ -9,6 +9,10 @@ intermediate values in the computation graph.
 Inspired by PyTorch's torch.nn.Parameter.
 """
 
+from __future__ import annotations
+
+import numpy as np
+
 from core.autograd import Value
 
 
@@ -18,16 +22,10 @@ class Parameter(Value):
     Parameters are Value nodes that represent weights, biases, or any
     other learned quantity in a neural network layer.  They are always
     leaf nodes in the computation graph (no parents / no operation).
-
-    Parameters
-    ----------
-    data : int | float | np.ndarray
-        The initial numerical data.  For a Linear layer this would be
-        a weight matrix or bias vector.
     """
 
-    def __init__(self, data):
+    def __init__(self, data: int | float | np.ndarray) -> None:
         super().__init__(data)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Parameter(data={self.data}, grad={self.grad})"

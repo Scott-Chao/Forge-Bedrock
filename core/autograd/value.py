@@ -15,7 +15,7 @@ Phase 2 uses raw NumPy ndarrays (not the Matrix class from Phase 1).
 
 from __future__ import annotations
 
-from typing import Tuple
+from collections.abc import Callable
 
 import numpy as np
 
@@ -34,30 +34,21 @@ class Value:
     constructs a new Value, links it to its inputs via _children, and stores
     a _backward closure that will later implement the chain rule for this
     specific operation.
-
-    Parameters
-    ----------
-    data : int | float | np.ndarray
-        The numerical data wrapped by this node.
-    children : tuple[Value, ...], optional
-        Parent nodes this value was derived from.
-    op : str, optional
-        A short string label for the operation that created this node.
     """
 
     def __init__(
         self,
-        data,
-        children: Tuple["Value", ...] = (),
+        data: int | float | np.ndarray,
+        children: tuple[Value, ...] = (),
         op: str = "",
     ):
-        self.data = data
-        self.grad = 0.0
-        self._children = set(children)
-        self._op = op
-        self._backward = lambda: None
+        self.data: int | float | np.ndarray = data
+        self.grad: int | float | np.ndarray = 0.0
+        self._children: set[Value] = set(children)
+        self._op: str = op
+        self._backward: Callable[[], None] = lambda: None
 
-    def _ensure_value(self, other):
+    def _ensure_value(self, other: Value | int | float) -> Value:
         """Wrap a Python scalar as a Value if it isn't one already.
 
         HINT: This helper is used in __add__, __mul__, etc. so that
@@ -67,7 +58,7 @@ class Value:
             return Value(other)
         return other
 
-    def _expand_to(self, target_shape):
+    def _expand_to(self, target_shape: tuple[int, ...]) -> Value:
         """Return a new Value whose data is broadcast to `target_shape`.
 
         Forward:  self.data is "stretched" to target_shape by replicating
@@ -113,7 +104,7 @@ class Value:
             b = b._expand_to(target_shape)
         return a, b
 
-    def __add__(self, other):
+    def __add__(self, other: Value | int | float) -> Value:
         other = self._ensure_value(other)
         self, other = self._broadcast_pair(self, other)
         out = Value(self.data + other.data, (self, other), "+")
@@ -126,7 +117,7 @@ class Value:
 
         return out
 
-    def __mul__(self, other):
+    def __mul__(self, other: Value | int | float) -> Value:
         other = self._ensure_value(other)
         self, other = self._broadcast_pair(self, other)
         out = Value(self.data * other.data, (self, other), "*")
@@ -139,7 +130,7 @@ class Value:
 
         return out
 
-    def __pow__(self, other):
+    def __pow__(self, other: int | float) -> Value:
         out = Value(self.data**other, (self,), "**")
 
         def _backward():
@@ -149,25 +140,25 @@ class Value:
 
         return out
 
-    def __neg__(self):
+    def __neg__(self) -> Value:
         return self * -1
 
-    def __sub__(self, other):
+    def __sub__(self, other: Value | int | float) -> Value:
         return self + (-other)
 
-    def __truediv__(self, other):
+    def __truediv__(self, other: Value | int | float) -> Value:
         return self * other ** (-1)
 
-    def __radd__(self, other):
+    def __radd__(self, other: Value | int | float) -> Value:
         return self + other
 
-    def __rmul__(self, other):
+    def __rmul__(self, other: Value | int | float) -> Value:
         return self * other
 
-    def __rsub__(self, other):
+    def __rsub__(self, other: Value | int | float) -> Value:
         return (-self) + other
 
-    def __rtruediv__(self, other):
+    def __rtruediv__(self, other: Value | int | float) -> Value:
         return self**-1 * other
 
     @staticmethod
@@ -193,7 +184,7 @@ class Value:
         _dfs(root)
         return order
 
-    def backward(self, gradient=None):
+    def backward(self, gradient: int | float | np.ndarray | None = None) -> None:
         """Kick off reverse-mode autograd from this node.
 
         Parameters
@@ -214,7 +205,7 @@ class Value:
         for node in reversed(order):
             node._backward()
 
-    def sum(self):
+    def sum(self) -> Value:
         out = Value(np.sum(self.data), (self,), "sum")
 
         def _backward():
@@ -224,7 +215,7 @@ class Value:
 
         return out
 
-    def mean(self):
+    def mean(self) -> Value:
         out = Value(np.mean(self.data), (self,), "mean")
 
         def _backward():
@@ -235,7 +226,7 @@ class Value:
         return out
 
     @property
-    def T(self):
+    def T(self) -> Value:
         out = Value(self.data.T, (self,), "T")
 
         def _backward():
@@ -245,7 +236,7 @@ class Value:
 
         return out
 
-    def __matmul__(self, other):
+    def __matmul__(self, other: Value | int | float) -> Value:
         other = self._ensure_value(other)
         out = Value(self.data @ other.data, (self, other), "@")
 
@@ -257,5 +248,5 @@ class Value:
 
         return out
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Value(data={self.data}, grad={self.grad})"
