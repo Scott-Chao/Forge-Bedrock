@@ -1,6 +1,6 @@
-import pytest
 import numpy as np
-from core.linalg import Matrix, SVD, PCA
+import pytest
+from core.linalg import PCA, SVD, Matrix
 
 
 # ---------------------------------------------------------

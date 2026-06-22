@@ -1,9 +1,7 @@
-import pytest
 import numpy as np
-
-from core.nn import Module, Parameter, Linear, Sequential, ReLU
+import pytest
 from core.autograd import Value
-
+from core.nn import Linear, Module, Parameter, ReLU, Sequential
 
 # =========================================================
 # 1. Parameter & Sub-module Registration

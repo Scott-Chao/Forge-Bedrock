@@ -1,8 +1,6 @@
-import pytest
 import numpy as np
-
-from core.nn import Sequential, Linear, ReLU, Tanh, Parameter
 from core.autograd import Value
+from core.nn import Linear, Parameter, ReLU, Sequential
 
 
 class TestInit:

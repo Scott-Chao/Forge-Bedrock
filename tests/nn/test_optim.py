@@ -1,8 +1,6 @@
 import numpy as np
-
 from core.nn import SGD
 from core.nn.parameter import Parameter
-
 
 # =========================================================
 # 1. Correctness

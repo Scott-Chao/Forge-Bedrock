@@ -1,7 +1,6 @@
-import pytest
 import numpy as np
-
-from core.linalg import Matrix, LU, Cholesky, TriangularSolver
+import pytest
+from core.linalg import LU, Cholesky, Matrix, TriangularSolver
 
 
 # ---------------------------------------------------------

@@ -1,8 +1,8 @@
-import pytest
 import numpy as np
-
-from core.nn import ReLU, Tanh, Sigmoid
-from core.autograd import Value, functional as F
+import pytest
+from core.autograd import Value
+from core.autograd import functional as F
+from core.nn import ReLU, Sigmoid, Tanh
 
 
 def _numerical_grad(f, x, h=1e-6):

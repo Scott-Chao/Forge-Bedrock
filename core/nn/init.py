@@ -14,7 +14,6 @@ References
 """
 
 import numpy as np
-
 from core.nn.parameter import Parameter
 
 

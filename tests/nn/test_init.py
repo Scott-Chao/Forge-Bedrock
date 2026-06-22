@@ -1,9 +1,7 @@
-import pytest
 import numpy as np
-
-from core.nn.init import xavier_uniform_, kaiming_uniform_
+import pytest
 from core.nn import Parameter
-
+from core.nn.init import kaiming_uniform_, xavier_uniform_
 
 INIT_FNS = [xavier_uniform_, kaiming_uniform_]
 

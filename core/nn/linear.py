@@ -15,7 +15,6 @@ from __future__ import annotations
 import math
 
 import numpy as np
-
 from core.autograd import Value
 from core.nn.init import kaiming_uniform_
 from core.nn.module import Module

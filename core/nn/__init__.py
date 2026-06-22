@@ -1,4 +1,4 @@
-from .activation import ReLU, Tanh, Sigmoid
+from .activation import ReLU, Sigmoid, Tanh
 from .data import DataLoader
 from .init import kaiming_uniform_, xavier_uniform_
 from .linear import Linear

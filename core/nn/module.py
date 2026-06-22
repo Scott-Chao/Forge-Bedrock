@@ -10,7 +10,7 @@ Inspired by PyTorch's torch.nn.Module.
 
 from __future__ import annotations
 
-from typing import Iterator
+from collections.abc import Iterator
 
 from core.nn.parameter import Parameter
 
@@ -41,8 +41,7 @@ class Module:
         object.__setattr__(self, name, value)
 
     def parameters(self) -> Iterator[Parameter]:
-        for p in self._parameters.values():
-            yield p
+        yield from self._parameters.values()
         for m in self._modules.values():
             yield from m.parameters()
 

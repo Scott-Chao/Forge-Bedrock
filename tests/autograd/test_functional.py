@@ -1,16 +1,15 @@
-import pytest
 import numpy as np
-
+import pytest
 from core.autograd import (
     Value,
-    relu,
-    sigmoid,
-    tanh,
     exp,
     log,
-    sqrt,
-    softmax,
     log_softmax,
+    relu,
+    sigmoid,
+    softmax,
+    sqrt,
+    tanh,
 )
 
 

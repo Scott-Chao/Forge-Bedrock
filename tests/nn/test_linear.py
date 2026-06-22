@@ -1,9 +1,7 @@
-import pytest
 import numpy as np
-
-from core.nn import Linear, Parameter
+import pytest
 from core.autograd import Value
-
+from core.nn import Linear, Parameter
 
 # =========================================================
 # 1. Initialisation & Properties

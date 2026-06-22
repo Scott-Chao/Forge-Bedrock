@@ -12,7 +12,6 @@ Inspired by PyTorch's torch.nn.Parameter.
 from __future__ import annotations
 
 import numpy as np
-
 from core.autograd import Value
 
 

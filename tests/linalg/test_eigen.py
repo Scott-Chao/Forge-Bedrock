@@ -1,7 +1,6 @@
-import pytest
 import numpy as np
-
-from core.linalg import Matrix, QR
+import pytest
+from core.linalg import QR, Matrix
 
 # =========================================================
 # Fixtures (Generate test data)

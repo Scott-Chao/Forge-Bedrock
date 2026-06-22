@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+
 from .matrix import Matrix
 from .solvers import TriangularSolver
 

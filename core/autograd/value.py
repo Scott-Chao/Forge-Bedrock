@@ -93,7 +93,7 @@ class Value:
         return out
 
     @staticmethod
-    def _broadcast_pair(a: "Value", b: "Value") -> tuple["Value", "Value"]:
+    def _broadcast_pair(a: Value, b: Value) -> tuple[Value, Value]:
         """Broadcast two Values to a common shape for element-wise ops."""
         a_data = np.asarray(a.data)
         b_data = np.asarray(b.data)
@@ -162,7 +162,7 @@ class Value:
         return self**-1 * other
 
     @staticmethod
-    def _topological_sort(root: "Value"):
+    def _topological_sort(root: Value):
         """
         Produce a topological ordering of the DAG rooted at `root`.
 

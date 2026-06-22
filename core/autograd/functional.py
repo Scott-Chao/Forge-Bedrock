@@ -7,6 +7,7 @@ This keeps the computation graph compact and avoids intermediate nodes.
 """
 
 import numpy as np
+
 from .value import Value
 
 

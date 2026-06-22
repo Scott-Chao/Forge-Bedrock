@@ -1,7 +1,7 @@
 import operator
-import pytest
-import numpy as np
 
+import numpy as np
+import pytest
 from core.linalg import Matrix
 
 

@@ -1,8 +1,5 @@
-import pytest
 import numpy as np
-
 from core.nn import DataLoader
-
 
 # =========================================================
 # 1. Correctness — batch sizes and iteration count
