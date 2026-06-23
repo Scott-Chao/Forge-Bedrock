@@ -74,7 +74,7 @@ Implement reverse-mode automatic differentiation (backpropagation) from scratch,
 Empirical distribution → theoretical distributions → information theory → bias-variance → MLE → loss functions → classification demos.
 - [ ] **Probability Distributions**
     - [x] Empirical distribution: histogram estimation from raw data
-    - [ ] Theoretical: Gaussian (Box-Muller sampling), Bernoulli, Categorical, Laplacian
+    - [x] Theoretical: Gaussian (Box-Muller sampling), Bernoulli, Categorical, Laplacian
     - [ ] Visualizing PDFs/PMFs with varying parameters
 - [ ] **Information Theory & Bias-Variance**
     - [ ] Entropy, KL Divergence, Cross-Entropy — computing all three on synthetic distributions
