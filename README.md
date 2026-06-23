@@ -72,10 +72,10 @@ Implement reverse-mode automatic differentiation (backpropagation) from scratch,
 
 ### Phase 3: Probability, Statistics & Loss Functions
 Empirical distribution → theoretical distributions → information theory → bias-variance → MLE → loss functions → classification demos.
-- [ ] **Probability Distributions**
+- [x] **Probability Distributions**
     - [x] Empirical distribution: histogram estimation from raw data
     - [x] Theoretical: Gaussian (Box-Muller sampling), Bernoulli, Categorical, Laplacian
-    - [ ] Visualizing PDFs/PMFs with varying parameters
+    - [x] Visualizing PDFs/PMFs with varying parameters
 - [ ] **Information Theory & Bias-Variance**
     - [ ] Entropy, KL Divergence, Cross-Entropy — computing all three on synthetic distributions
     - [ ] Bias-Variance Decomposition: $\mathbb{E}[(y-\hat{f})^2] = \text{Bias}^2 + \text{Var} + \sigma^2$, connecting loss choice to model behavior

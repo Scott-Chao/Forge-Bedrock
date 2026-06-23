@@ -6,10 +6,11 @@ from core.prob.distributions import Bernoulli, Categorical, Gaussian, Laplacian
 # Gaussian
 # =========================================================
 
+
 class TestGaussian:
     def test_pdf_peak_at_mean(self):
         g = Gaussian(mu=2.0, sigma=1.5)
-        assert g.pdf(2.0) == pytest.approx(1 / np.sqrt(2 * np.pi * 1.5 ** 2))
+        assert g.pdf(2.0) == pytest.approx(1 / np.sqrt(2 * np.pi * 1.5**2))
 
     def test_pdf_symmetric(self):
         g = Gaussian(mu=0.0, sigma=1.0)
@@ -56,6 +57,7 @@ class TestGaussian:
 # Bernoulli
 # =========================================================
 
+
 class TestBernoulli:
     @pytest.mark.parametrize("p", [0.0, 0.3, 0.5, 0.7, 1.0])
     def test_pmf_valid(self, p):
@@ -89,6 +91,7 @@ class TestBernoulli:
 # =========================================================
 # Categorical
 # =========================================================
+
 
 class TestCategorical:
     def test_pmf_known(self):
@@ -127,6 +130,7 @@ class TestCategorical:
 # =========================================================
 # Laplacian
 # =========================================================
+
 
 class TestLaplacian:
     def test_pdf_peak_at_mu(self):
@@ -170,4 +174,4 @@ class TestLaplacian:
     def test_mean_and_variance(self):
         lap = Laplacian(mu=3.0, b=0.5)
         assert lap.mean == 3.0
-        assert lap.variance == 2 * 0.5 ** 2
+        assert lap.variance == 2 * 0.5**2

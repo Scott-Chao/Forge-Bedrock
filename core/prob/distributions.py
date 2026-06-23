@@ -17,6 +17,7 @@ import numpy as np
 # Gaussian (Normal) Distribution
 # ---------------------------------------------------------------------------
 
+
 class Gaussian:
     """Gaussian (normal) distribution: N(x | mu, sigma^2).
 
@@ -38,13 +39,13 @@ class Gaussian:
         p(x) = 1/sqrt(2 pi sigma^2) * exp(-(x - mu)^2 / (2 sigma^2))
         """
         z = (x - self._mu) / self._sigma
-        p = np.exp(-z ** 2 / 2) / np.sqrt(2 * np.pi * self._sigma ** 2)
+        p = np.exp(-(z**2) / 2) / np.sqrt(2 * np.pi * self._sigma**2)
         return p
 
     def log_pdf(self, x: float | np.ndarray) -> float | np.ndarray:
         """Log-PDF (more numerically stable than log(pdf))."""
         z = (x - self._mu) / self._sigma
-        log_p = -z ** 2 / 2 - 0.5 * np.log(2 * np.pi) - np.log(self._sigma)
+        log_p = -(z**2) / 2 - 0.5 * np.log(2 * np.pi) - np.log(self._sigma)
         return log_p
 
     def sample(self, n: int, rng: np.random.Generator | None = None) -> np.ndarray:
@@ -60,12 +61,13 @@ class Gaussian:
 
     @property
     def variance(self) -> float:
-        return self._sigma ** 2
+        return self._sigma**2
 
 
 # ---------------------------------------------------------------------------
 # Bernoulli Distribution
 # ---------------------------------------------------------------------------
+
 
 class Bernoulli:
     """Bernoulli distribution: Bern(x | p).
@@ -85,7 +87,7 @@ class Bernoulli:
         """Probability mass function: p(x) = p^x * (1-p)^(1-x)."""
         x = np.asarray(x)
         mask = (x == 0) | (x == 1)
-        p = np.where(mask, self._p ** x * (1 - self._p) ** (1 - x), 0.0)
+        p = np.where(mask, self._p**x * (1 - self._p) ** (1 - x), 0.0)
         return p.item() if p.ndim == 0 else p
 
     def log_pmf(self, x: int | np.ndarray) -> float | np.ndarray:
@@ -117,6 +119,7 @@ class Bernoulli:
 # ---------------------------------------------------------------------------
 # Categorical Distribution
 # ---------------------------------------------------------------------------
+
 
 class Categorical:
     """Categorical distribution: Cat(x | probs).
@@ -168,6 +171,7 @@ class Categorical:
 # Laplacian Distribution
 # ---------------------------------------------------------------------------
 
+
 class Laplacian:
     """Laplacian distribution: Lap(x | mu, b).
 
@@ -206,7 +210,7 @@ class Laplacian:
 
     def cdf(self, x: float | np.ndarray) -> float | np.ndarray:
         """CDF: F(x) = 0.5 * exp((x - mu)/b) for x < mu,
-                   1 - 0.5 * exp(-(x - mu)/b) for x >= mu.
+        1 - 0.5 * exp(-(x - mu)/b) for x >= mu.
         """
         z = (x - self._mu) / self._b
         return np.where(x < self._mu, 0.5 * np.exp(z), 1 - 0.5 * np.exp(-z))
@@ -217,4 +221,4 @@ class Laplacian:
 
     @property
     def variance(self) -> float:
-        return 2.0 * self._b ** 2
+        return 2.0 * self._b**2
