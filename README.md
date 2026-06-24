@@ -76,9 +76,9 @@ Empirical distribution → theoretical distributions → information theory → 
     - [x] Empirical distribution: histogram estimation from raw data
     - [x] Theoretical: Gaussian (Box-Muller sampling), Bernoulli, Categorical, Laplacian
     - [x] Visualizing PDFs/PMFs with varying parameters
-- [ ] **Information Theory & Bias-Variance**
+- [x] **Information Theory & Bias-Variance**
     - [x] Entropy, KL Divergence, Cross-Entropy — computing all three on synthetic distributions
-    - [ ] Bias-Variance Decomposition: $\mathbb{E}[(y-\hat{f})^2] = \text{Bias}^2 + \text{Var} + \sigma^2$, connecting loss choice to model behavior
+    - [x] Bias-Variance Decomposition: $\mathbb{E}[(y-\hat{f})^2] = \text{Bias}^2 + \text{Var} + \sigma^2$, connecting loss choice to model behavior
 - [ ] **MLE → Loss Functions**
     - [ ] Likelihood → Negative Log-Likelihood → Loss (the general pattern)
     - [ ] Derive each: Gaussian→MSE, Laplacian→L1, Bernoulli→BCE, Categorical→CrossEntropy; Huber as pragmatic design
