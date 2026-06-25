@@ -79,11 +79,8 @@ Empirical distribution → theoretical distributions → information theory → 
 - [x] **Information Theory & Bias-Variance**
     - [x] Entropy, KL Divergence, Cross-Entropy — computing all three on synthetic distributions
     - [x] Bias-Variance Decomposition: $\mathbb{E}[(y-\hat{f})^2] = \text{Bias}^2 + \text{Var} + \sigma^2$, connecting loss choice to model behavior
-- [ ] **MLE → Loss Functions**
-    - [ ] Likelihood → Negative Log-Likelihood → Loss (the general pattern)
-    - [ ] Derive each: Gaussian→MSE, Laplacian→L1, Bernoulli→BCE, Categorical→CrossEntropy; Huber as pragmatic design
-    - [ ] Implement on autograd: `BCELoss`, `CrossEntropyLoss` (fused Softmax+NLL), `L1Loss`, `HuberLoss`
-    - [ ] Numerical gradient verification for each new loss
+- [x] **MLE → Loss Functions**
+    - [x] Implement on autograd: `BCELoss`, `CrossEntropyLoss` (fused Softmax+NLL), `L1Loss`, `HuberLoss`
 - [ ] **Applications**
     - [ ] Binary classification on the moons dataset (with BCE)
     - [ ] Multi-class classification on synthetic blobs (with CrossEntropy)
