@@ -8,44 +8,20 @@ This is an AI student's "reinvent the wheel" learning project. The core goal is 
 - When problems arise, prioritize explaining the principles and outlining the approach, letting the user decide how to implement
 - Refer to README.md for the project's overall goals and roadmap
 
-## Project Structure
+## Architecture
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full project structure tree.
 
 ```
 forge-bedrock/
-├── core/linalg/          # Core linear algebra implementations
-│   ├── matrix.py         # Matrix class (NumPy ndarray wrapper)
-│   ├── decompositions.py # LU, Cholesky, QR, SVD
-│   ├── solvers.py        # Triangular solver, eigenvalue solver
-│   ├── pca.py            # PCA dimensionality reduction
-│   └── broadcast.py      # Custom broadcasting engine
-├── core/autograd/        # Reverse-mode autograd engine (Phase 2)
-│   ├── __init__.py
-│   ├── value.py          # Value class with dynamic DAG construction
-│   ├── functional.py     # Activation & transcendental functions
-│   └── viz.py            # Computation graph visualization
-├── core/nn/              # Neural network modules (Phase 2)
-│   ├── __init__.py
-│   ├── activation.py     # ReLU, Tanh, Sigmoid layer wrappers
-│   ├── data.py           # DataLoader mini-batch iteration
-│   ├── init.py           # Xavier/Glorot & He/Kaiming weight init
-│   ├── linear.py         # Fully-connected (Linear) layer
-│   ├── loss.py           # MSELoss for regression tasks
-│   ├── module.py         # Module base class (parameter registration)
-│   ├── optim.py          # SGD optimizer
-│   ├── parameter.py      # Parameter class (trainable Value subclass)
-│   └── sequential.py     # Sequential container for layer pipelines
-├── core/prob/            # Probability & statistics (Phase 3)
-│   ├── __init__.py
-│   └── empirical.py      # Empirical distribution & histogram estimation
-├── apps/                 # Application Jupyter Notebooks
-│   ├── image_compression.ipynb
-│   ├── least_squares_regression.ipynb
-│   └── mlp_regression.ipynb
-├── tests/linalg/         # pytest tests for linear algebra
-├── tests/autograd/       # pytest tests for autograd
-├── tests/nn/             # pytest tests for neural network modules
-├── tests/prob/           # pytest tests for probability & statistics
-└── environment.yml       # conda environment
+├── core/         # Foundational library implementations
+│   ├── linalg/   # Linear algebra (Matrix class, decompositions, solvers, PCA, broadcast)
+│   ├── autograd/ # Reverse-mode autograd engine (Value, functional, viz)
+│   ├── nn/       # Neural network modules (layers, loss, optim, data, init, sequential)
+│   └── prob/     # Probability, info theory, bias-variance decomposition
+├── apps/         # Jupyter notebooks demonstrating each component
+├── tests/        # pytest tests mirroring core/ structure
+└── assets/       # Static resources (images, etc.)
 ```
 
 ## Code Style
