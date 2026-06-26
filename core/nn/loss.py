@@ -189,14 +189,16 @@ class CrossEntropyLoss(Module):
             Internally converted to one-hot for gradient computation.
         """
         z = logits.data
+        t = target.data.ravel()  # ensure 1-D: (batch_size,) — NOT (batch_size, 1)
+
         z_max = np.max(z, axis=1, keepdims=True)
         z_shifted = z - z_max
 
         log_sum_exp = z_max + np.log(np.sum(np.exp(z_shifted), axis=1, keepdims=True))
         log_probs = z - log_sum_exp
 
-        indices = np.arange(len(target.data))
-        correct_log_probs = log_probs[indices, target.data]
+        batch_size = z.shape[0]
+        correct_log_probs = log_probs[np.arange(batch_size), t]
 
         loss_data = -np.mean(correct_log_probs)
         out = Value(loss_data, (logits, target), "CrossEntropyLoss")
@@ -204,8 +206,8 @@ class CrossEntropyLoss(Module):
         def _backward():
             p = np.exp(z_shifted) / np.sum(np.exp(z_shifted), axis=1, keepdims=True)
             one_hot = np.zeros_like(p)
-            one_hot[indices, target.data] = 1.0
-            grad = (p - one_hot) / len(target.data)
+            one_hot[np.arange(batch_size), t] = 1.0
+            grad = (p - one_hot) / batch_size
             logits.grad += grad
 
         out._backward = _backward

@@ -83,7 +83,7 @@ Empirical distribution → theoretical distributions → information theory → 
     - [x] Implement on autograd: `BCELoss`, `CrossEntropyLoss` (fused Softmax+NLL), `L1Loss`, `HuberLoss`
 - [ ] **Applications**
     - [x] Binary classification on the moons dataset (with BCE)
-    - [ ] Multi-class classification on synthetic blobs (with CrossEntropy)
+    - [x] Multi-class classification on synthetic blobs (with CrossEntropy)
     - [ ] Comparing MSE vs L1 vs Huber on regression with outliers
 
 ### Phase 4: Optimization & Training Logic
