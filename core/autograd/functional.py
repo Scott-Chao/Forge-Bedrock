@@ -87,22 +87,27 @@ def softmax(x: Value) -> Value:
     """
     Softmax with stable log-sum-exp trick.
 
-    p_i = exp(x_i) / sum_j exp(x_j)
+        p_i = exp(x_i) / sum_j exp(x_j)
+
+    Operates along the last axis, so (batch_size, num_classes) applies
+    softmax over the class dimension per sample.
 
     For numerical stability, subtract the max before exponentiating:
-    shifted = x - max(x)
-    p = exp(shifted) / sum(exp(shifted))
+        shifted = x - max(x, axis=-1)
+        p = exp(shifted) / sum(exp(shifted), axis=-1)
 
     The backward (Jacobian-vector product):
         ∂p_i / ∂x_j = p_i * (δ_ij - p_j)
-        grad_x = p * (grad_out - dot(p, grad_out))
+        grad_x = p * (grad_out - sum(p * grad_out))
     """
-    shifted = x.data - np.max(x.data)
-    out_data = np.exp(shifted) / np.sum(np.exp(shifted))
+    shifted = x.data - np.max(x.data, axis=-1, keepdims=True)
+    out_data = np.exp(shifted) / np.sum(np.exp(shifted), axis=-1, keepdims=True)
     out = Value(out_data, (x,), "Softmax")
 
     def _backward():
-        x.grad += out_data * (out.grad - np.dot(out_data, out.grad))
+        x.grad += out_data * (
+            out.grad - (out_data * out.grad).sum(axis=-1, keepdims=True)
+        )
 
     out._backward = _backward
     return out
@@ -112,20 +117,23 @@ def log_softmax(x: Value) -> Value:
     """
     Log-softmax with stable log-sum-exp trick.
 
-    log(p_i) = x_i - log-sum-exp(x)
+        log(p_i) = x_i - log-sum-exp(x)
 
-    where log-sum-exp(x) = max(x) + log(sum(exp(x - max(x)))).
+    where log-sum-exp(x) = max(x, axis=-1) + log(sum(exp(x - max(x)), axis=-1)).
 
     The backward (Jacobian-vector product):
         ∂log(p_i) / ∂x_j = δ_ij - p_j
         grad_x = grad_out - sum(grad_out) * p
     """
-    log_sum_exp_x = np.max(x.data) + np.log(np.sum(np.exp(x.data - np.max(x.data))))
-    out_data = x.data - log_sum_exp_x
+    shifted = x.data - np.max(x.data, axis=-1, keepdims=True)
+    log_sum_exp = np.max(x.data, axis=-1, keepdims=True) + np.log(
+        np.sum(np.exp(shifted), axis=-1, keepdims=True)
+    )
+    out_data = x.data - log_sum_exp
     out = Value(out_data, (x,), "LogSoftmax")
 
     def _backward():
-        x.grad += out.grad - np.sum(out.grad) * np.exp(out.data)
+        x.grad += out.grad - out.grad.sum(axis=-1, keepdims=True) * np.exp(out.data)
 
     out._backward = _backward
     return out
