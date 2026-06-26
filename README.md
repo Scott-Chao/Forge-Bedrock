@@ -86,10 +86,19 @@ Empirical distribution → theoretical distributions → information theory → 
     - [x] Multi-class classification on synthetic blobs (with CrossEntropy)
     - [x] Comparing MSE vs L1 vs Huber on regression with outliers
 
-### Phase 4: Optimization & Training Logic
-- [ ] Stochastic Gradient Descent (SGD) and Momentum.
-- [ ] Adaptive methods: AdaGrad, RMSProp, and Adam.
-- [ ] Regularization techniques (L1/L2 Weight Decay) from a mathematical constraint perspective.
+### Phase 4: Optimization — from Gradient Descent to Adaptive Methods
+Gradient descent fails in predictable ways. Each technique is a targeted fix: diagnose the failure mode, implement the repair.
+- [ ] **Parameter Update Rules** — better step direction & per-parameter scaling
+    - [ ] SGD → Momentum → NAG: curriculum from vanilla steps to velocity-based updates, fighting ravine oscillation
+    - [ ] AdaGrad → RMSProp: per-parameter scaling for varying curvatures, from full accumulation to sliding window
+    - [ ] Adam → AdamW: momentum + adaptive scaling combined; then decoupled weight decay to fix a subtle L2 interaction bug
+- [ ] **Supporting Constraints** — what to do when the update alone isn't enough
+    - [ ] Learning rate schedules: step decay, cosine annealing, warmup — the same gradient, smaller or more timely steps
+    - [ ] Gradient clipping: norm clipping and value clipping — when a minibatch produces a pathological gradient
+    - [ ] Regularization: L1 (Laplace prior → sparsity), L2/Weight Decay (Gaussian prior → shrinkage)
+- [ ] **Applications**
+    - [ ] Toy loss surface comparison (Beale / Rosenbrock) — watch optimizer behavior match theory
+    - [ ] Demo: train the same classifier with SGD, Momentum, Adam — compare convergence curves
 
 ---
 
