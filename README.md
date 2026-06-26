@@ -81,10 +81,10 @@ Empirical distribution → theoretical distributions → information theory → 
     - [x] Bias-Variance Decomposition: $\mathbb{E}[(y-\hat{f})^2] = \text{Bias}^2 + \text{Var} + \sigma^2$, connecting loss choice to model behavior
 - [x] **MLE → Loss Functions**
     - [x] Implement on autograd: `BCELoss`, `CrossEntropyLoss` (fused Softmax+NLL), `L1Loss`, `HuberLoss`
-- [ ] **Applications**
+- [x] **Applications**
     - [x] Binary classification on the moons dataset (with BCE)
     - [x] Multi-class classification on synthetic blobs (with CrossEntropy)
-    - [ ] Comparing MSE vs L1 vs Huber on regression with outliers
+    - [x] Comparing MSE vs L1 vs Huber on regression with outliers
 
 ### Phase 4: Optimization & Training Logic
 - [ ] Stochastic Gradient Descent (SGD) and Momentum.
