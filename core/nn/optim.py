@@ -162,3 +162,110 @@ class NAG(Optimizer):
             if param.grad is not None:
                 v[...] = self.beta * v + self.lr * param.grad
                 param.data -= self.beta * v + self.lr * param.grad
+
+
+class AdaGrad(Optimizer):
+    """AdaGrad optimizer — per-parameter adaptive learning rates.
+
+    AdaGrad scales the learning rate for each parameter *inversely* to
+    the square root of the sum of its past squared gradients:
+
+        cache += g²
+        theta -= lr / (sqrt(cache) + eps) * g
+
+    Parameters that have received large gradients are closer to being
+    well-optimised (or lie on a steep slope), so their step size is
+    suppressed.  Parameters with small gradients get larger updates.
+
+    This is a form of diagonal preconditioning: diag(1 / sqrt(cache))
+    approximates the inverse curvature, analogous to what the Hessian
+    provides in Newton's method but at trivial cost.
+
+    Limitations
+    -----------
+    cache is monotonic (it sums squares, never decreases), so the
+    effective learning rate *lr / sqrt(cache)* tends to zero over time.
+    This is fine for convex problems but often kills learning before
+    convergence in deep networks.
+
+    Parameters
+    ----------
+    parameters : iterable of Parameter
+        The model parameters to optimize.
+    lr : float, default=0.01
+        Global learning rate.  AdaGrad is often used with lr ~ 0.01.
+    eps : float, default=1e-8
+        Small constant for numerical stability when cache is near zero.
+    """
+
+    def __init__(
+        self,
+        parameters: Iterator[Parameter],
+        lr: float = 0.01,
+        eps: float = 1e-8,
+    ) -> None:
+        super().__init__(parameters, lr)
+        self.eps = eps
+        self.caches = [np.zeros_like(p.data) for p in self.params]
+
+    def step(self) -> None:
+        for param, c in zip(self.params, self.caches):
+            if param.grad is not None:
+                c[...] += param.grad**2
+                adjusted_lr = self.lr / (np.sqrt(c) + self.eps)
+                param.data -= adjusted_lr * param.grad
+
+
+class RMSProp(Optimizer):
+    """RMSProp optimizer — adaptive learning rates with sliding window.
+
+    RMSProp fixes AdaGrad's monotonic decay by replacing the full sum of
+    squared gradients with an exponentially weighted moving average (EWMA):
+
+        cache = beta * cache + (1 - beta) * g²
+        theta -= lr / (sqrt(cache) + eps) * g
+
+    The EWMA gives RMSProp a *sliding window* over recent gradient history.
+    When gradient magnitudes shrink (e.g. after passing a steep region),
+    the cache decays and the learning rate recovers — something AdaGrad
+    cannot do because its cache only grows.
+
+    Effective window length ≈ 1 / (1 - beta) steps:
+        beta = 0.9   →   ~10 steps
+        beta = 0.99  →  ~100 steps
+        beta = 0.999 → ~1000 steps (rarely used, very slow adaptation)
+
+    Typically the same update rule is written without the (1 - beta) factor
+    in PyTorch — check the source to see why this convention varies.
+
+    Parameters
+    ----------
+    parameters : iterable of Parameter
+        The model parameters to optimize.
+    lr : float, default=0.001
+        Global learning rate.  Typical range [0.0001, 0.01].
+    beta : float, default=0.9
+        Decay rate for the EWMA.  Controls how far back the cache
+        remembers squared gradients.
+    eps : float, default=1e-8
+        Small constant for numerical stability.
+    """
+
+    def __init__(
+        self,
+        parameters: Iterator[Parameter],
+        lr: float = 0.001,
+        beta: float = 0.9,
+        eps: float = 1e-8,
+    ) -> None:
+        super().__init__(parameters, lr)
+        self.beta = beta
+        self.eps = eps
+        self.caches = [np.zeros_like(p.data) for p in self.params]
+
+    def step(self) -> None:
+        for param, c in zip(self.params, self.caches):
+            if param.grad is not None:
+                c[...] = self.beta * c + (1 - self.beta) * param.grad**2
+                adjusted_lr = self.lr / (np.sqrt(c) + self.eps)
+                param.data -= adjusted_lr * param.grad

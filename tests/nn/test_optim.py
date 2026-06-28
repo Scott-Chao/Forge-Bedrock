@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from core.nn import NAG, SGD, Momentum, Optimizer
+from core.nn import AdaGrad, NAG, RMSProp, SGD, Momentum, Optimizer
 from core.nn.parameter import Parameter
 
 # =========================================================
@@ -202,3 +202,200 @@ class TestOptimizerBase:
         opt = Optimizer([], lr=0.01)
         with pytest.raises(NotImplementedError):
             opt.step()
+
+    def test_adagrad_is_optimizer(self):
+        assert isinstance(AdaGrad([], lr=0.01), Optimizer)
+
+    def test_rmsprop_is_optimizer(self):
+        assert isinstance(RMSProp([], lr=0.01), Optimizer)
+
+
+# =========================================================
+# 6. Correctness — AdaGrad
+# =========================================================
+
+
+class TestAdaGrad:
+    def test_first_step_formula(self):
+        """First step: cache = g², adjusted_lr = lr / (sqrt(cache) + eps)."""
+        p = Parameter(np.array([4.0]))
+        p.grad = np.array([3.0])
+        opt = AdaGrad([p], lr=0.5, eps=1e-8)
+
+        opt.step()
+
+        # cache = 3² = 9
+        # adjusted_lr = 0.5 / (sqrt(9) + 1e-8) = 0.5/3
+        # param = 4 - (0.5/3) * 3 = 4 - 0.5 = 3.5
+        expected = 3.5
+        np.testing.assert_allclose(p.data, np.array([expected]))
+
+    def test_cache_grows_monotonically(self):
+        """AdaGrad cache only increases, never decreases."""
+        p = Parameter(np.array([1.0]))
+        opt = AdaGrad([p], lr=0.1, eps=1e-8)
+        prev_cache = None
+        for step_mag in [1.0, 2.0, 0.5, 3.0]:
+            p.grad = np.array([step_mag])
+            opt.step()
+            c = opt.caches[0].copy()
+            if prev_cache is not None:
+                assert np.all(c >= prev_cache), "cache must be monotonic"
+            prev_cache = c
+
+    def test_zero_grad_preserves_cache(self):
+        """zero_grad() clears gradient, leaves cache intact."""
+        p = Parameter(np.array([1.0]))
+        p.grad = np.array([2.0])
+        opt = AdaGrad([p], lr=0.1)
+        opt.step()  # cache = 4.0
+        cache_before = opt.caches[0].copy()
+
+        opt.zero_grad()  # grad → 0.0
+
+        np.testing.assert_array_equal(opt.caches[0], cache_before)
+
+    def test_skip_parameter_with_none_grad(self):
+        """Parameter with grad=None is untouched, and its cache stays 0."""
+        p1 = Parameter(np.array([1.0]))
+        p1.grad = np.array([0.5])
+        p2 = Parameter(np.array([2.0]))
+        p2.grad = None
+        opt = AdaGrad([p1, p2], lr=0.1)
+        opt.step()
+
+        np.testing.assert_allclose(
+            p1.data, np.array([1.0 - 0.1 / np.sqrt(0.25 + 1e-8) * 0.5])
+        )
+        np.testing.assert_allclose(p2.data, np.array([2.0]))
+        np.testing.assert_allclose(opt.caches[1], np.array([0.0]))
+
+    def test_per_parameter_scaling(self):
+        """Larger gradient dimension gets stronger LR suppression."""
+        p = Parameter(np.array([0.0, 0.0]))
+        p.grad = np.array([1.0, 10.0])
+        opt = AdaGrad([p], lr=1.0, eps=1e-8)
+        opt.step()
+
+        # dim0: cache=1,   adjusted_lr = 1/(1+eps)=1,     step=-1.0
+        # dim1: cache=100, adjusted_lr = 1/(10+eps)=0.1,  step=-1.0 (-0.1*10)
+        # Both have same numerical update, but different adjusted_lrs
+        assert opt.caches[0][0] < opt.caches[0][1]
+
+    def test_converges_on_one_dimensional_quadratic(self):
+        """AdaGrad decreases loss on f(x) = x²."""
+        p = Parameter(np.array([10.0]))
+        opt = AdaGrad([p], lr=1.0, eps=1e-8)
+        losses = []
+        for _ in range(100):
+            p.grad = np.array([2.0 * p.data.item()])  # ∇x² = 2x
+            opt.step()
+            losses.append(p.data.item() ** 2)
+        assert losses[-1] < losses[0] * 0.01
+
+
+# =========================================================
+# 7. Correctness — RMSProp
+# =========================================================
+
+
+class TestRMSProp:
+    def test_first_step_formula(self):
+        """First step: cache = (1-beta) * g², adjusted_lr = lr / (sqrt(cache) + eps)."""
+        p = Parameter(np.array([4.0]))
+        p.grad = np.array([3.0])
+        opt = RMSProp([p], lr=0.5, beta=0.9, eps=1e-8)
+
+        opt.step()
+
+        # cache = 0.9*0 + 0.1*9 = 0.9
+        # adjusted_lr = 0.5 / (sqrt(0.9) + 1e-8) ≈ 0.5 / 0.94868
+        # param = 4 - adjusted_lr * 3
+        cache = 0.1 * 9.0
+        adjusted_lr = 0.5 / (np.sqrt(cache) + 1e-8)
+        expected = 4.0 - adjusted_lr * 3.0
+        np.testing.assert_allclose(p.data, np.array([expected]))
+
+    def test_cache_decays_when_gradient_drops(self):
+        """RMSProp cache shrinks when gradient magnitude decreases (unlike AdaGrad)."""
+        p = Parameter(np.array([0.0]))
+        opt = RMSProp([p], lr=0.1, beta=0.9, eps=1e-8)
+
+        # Initially large gradients
+        for _ in range(10):
+            p.grad = np.array([10.0])
+            opt.step()
+
+        peak_cache = opt.caches[0].item()
+
+        # Then tiny gradients
+        for _ in range(20):
+            p.grad = np.array([0.01])
+            opt.step()
+
+        decayed_cache = opt.caches[0].item()
+        assert decayed_cache < peak_cache * 0.5, (
+            "RMSProp cache should decay when gradients shrink"
+        )
+
+    def test_cache_approaches_steady_state(self):
+        """With constant gradient, EWMA cache asymptotically approaches g²."""
+        p = Parameter(np.array([0.0]))
+        p.grad = np.array([5.0])
+        opt = RMSProp([p], lr=0.1, beta=0.9, eps=1e-8)
+
+        for _ in range(200):
+            p.grad = np.array([5.0])
+            opt.step()
+
+        # Steady state: cache → g² = 25
+        np.testing.assert_allclose(opt.caches[0], 25.0, atol=0.5)
+
+    def test_zero_grad_preserves_cache(self):
+        """zero_grad() clears gradient, leaves cache intact."""
+        p = Parameter(np.array([1.0]))
+        p.grad = np.array([2.0])
+        opt = RMSProp([p], lr=0.1, beta=0.9)
+        opt.step()
+        cache_before = opt.caches[0].copy()
+
+        opt.zero_grad()
+
+        np.testing.assert_array_equal(opt.caches[0], cache_before)
+
+    def test_skip_parameter_with_none_grad(self):
+        """Parameter with grad=None is untouched."""
+        p1 = Parameter(np.array([1.0]))
+        p1.grad = np.array([0.5])
+        p2 = Parameter(np.array([2.0]))
+        p2.grad = None
+        opt = RMSProp([p1, p2], lr=0.1, beta=0.9)
+        opt.step()
+
+        np.testing.assert_allclose(p2.data, np.array([2.0]))
+        np.testing.assert_allclose(opt.caches[1], np.array([0.0]))
+
+    def test_beta_zero_equiv_adagrad_first_step(self):
+        """beta=0 makes first step identical to AdaGrad (both cache = g²)."""
+        p_r = Parameter(np.array([5.0]))
+        p_r.grad = np.array([2.0])
+        p_a = Parameter(np.array([5.0]))
+        p_a.grad = np.array([2.0])
+        opt_r = RMSProp([p_r], lr=0.5, beta=0.0, eps=1e-8)
+        opt_a = AdaGrad([p_a], lr=0.5, eps=1e-8)
+
+        opt_r.step()
+        opt_a.step()
+
+        np.testing.assert_allclose(p_r.data, p_a.data)
+
+    def test_converges_on_one_dimensional_quadratic(self):
+        """RMSProp decreases loss on f(x) = x²."""
+        p = Parameter(np.array([10.0]))
+        opt = RMSProp([p], lr=1.0, beta=0.9, eps=1e-8)
+        losses = []
+        for _ in range(100):
+            p.grad = np.array([2.0 * p.data.item()])
+            opt.step()
+            losses.append(p.data.item() ** 2)
+        assert losses[-1] < losses[0] * 0.01
