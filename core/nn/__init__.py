@@ -14,6 +14,7 @@ from .lr_scheduler import (
 from .module import Module
 from .optim import NAG, SGD, AdaGrad, Adam, AdamW, Momentum, Optimizer, RMSProp
 from .parameter import Parameter
+from .regularizer import l1_penalty, l2_penalty
 from .sequential import Sequential
 
 __all__ = [
@@ -46,5 +47,7 @@ __all__ = [
     "clip_grad_norm_",
     "clip_grad_value_",
     "kaiming_uniform_",
+    "l1_penalty",
+    "l2_penalty",
     "xavier_uniform_",
 ]
