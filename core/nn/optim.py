@@ -269,3 +269,129 @@ class RMSProp(Optimizer):
                 c[...] = self.beta * c + (1 - self.beta) * param.grad**2
                 adjusted_lr = self.lr / (np.sqrt(c) + self.eps)
                 param.data -= adjusted_lr * param.grad
+
+
+class Adam(Optimizer):
+    """Adam optimizer — adaptive moment estimation.
+
+    Adam combines Momentum-style velocity smoothing with RMSProp-style
+    per-parameter adaptive scaling, plus bias correction to counteract
+    zero initialization:
+
+        m = beta1 * m + (1 - beta1) * g              # biased 1st moment (mean)
+        v = beta2 * v + (1 - beta2) * g**2            # biased 2nd moment (uncentered var)
+
+        m_hat = m / (1 - beta1**t)                    # bias correction
+        v_hat = v / (1 - beta2**t)
+
+        theta -= lr * m_hat / (sqrt(v_hat) + eps)    # update
+
+    Intuition: m is the direction (smoothed gradient), v is the step-size
+    scaler (inverse RMS of recent gradients).  Together they give a robust,
+    per-parameter adaptive update that works well across a huge range of
+    problems with minimal tuning.
+
+    Bias correction is critical in early steps: without it, m and v are
+    both biased heavily toward zero at t=1, producing vanishingly small
+    updates.  The correction decays to 1 as t grows.
+
+    Parameters
+    ----------
+    parameters : iterable of Parameter
+        The model parameters to optimize.
+    lr : float, default=0.001
+        Learning rate.  Adam's default (0.001) works well across many tasks.
+    betas : tuple of float, default=(0.9, 0.999)
+        Coefficients for computing running averages of gradient and its square.
+        beta1 controls the momentum window (~10 steps), beta2 controls the
+        squared-gradient window (~1000 steps).
+    eps : float, default=1e-8
+        Small constant for numerical stability.
+    """
+
+    def __init__(
+        self,
+        parameters: Iterator[Parameter],
+        lr: float = 0.001,
+        betas: tuple[float, float] = (0.9, 0.999),
+        eps: float = 1e-8,
+    ) -> None:
+        super().__init__(parameters, lr)
+        self.beta1, self.beta2 = betas
+        self.eps = eps
+        self.t = 0  # step counter, used for bias correction
+        self.m = [np.zeros_like(p.data) for p in self.params]
+        self.v = [np.zeros_like(p.data) for p in self.params]
+
+    def step(self) -> None:
+        self.t += 1
+        for p, m, v in zip(self.params, self.m, self.v):
+            if p.grad is not None:
+                m[...] = self.beta1 * m + (1 - self.beta1) * p.grad
+                v[...] = self.beta2 * v + (1 - self.beta2) * p.grad**2
+                m_hat = m / (1 - self.beta1**self.t)
+                v_hat = v / (1 - self.beta2**self.t)
+                p.data -= self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
+
+
+class AdamW(Optimizer):
+    """AdamW optimizer — Adam with decoupled weight decay.
+
+    AdamW fixes a subtle but important interaction in the original Adam:
+    when L2 regularization is implemented via +lambda*theta on the gradient,
+    the weight-decay term gets scaled by the *adaptive learning rate*
+    (m_hat / sqrt(v_hat)).  This means:
+
+        - parameters with large recent gradients get MORE regularization
+        - parameters with small recent gradients get LESS regularization
+
+    This is wrong: weight decay should be a *uniform* shrinkage, not an
+    adaptive one.  AdamW decouples the two operations:
+
+        theta -= lr * (m_hat / (sqrt(v_hat) + eps))     # Adam update
+        theta -= lr * wd * theta                         # decoupled weight decay
+
+    The weight decay is applied *after* the gradient-based step, using a
+    fixed proportion (lr * wd) that is the same for every parameter.
+
+    Parameters
+    ----------
+    parameters : iterable of Parameter
+        The model parameters to optimize.
+    lr : float, default=0.001
+        Learning rate.
+    betas : tuple of float, default=(0.9, 0.999)
+        Coefficients for running averages of gradient and its square.
+    eps : float, default=1e-8
+        Small constant for numerical stability.
+    weight_decay : float, default=0.01
+        Weight decay coefficient (lambda).  Applied uniformly to every
+        parameter after the adaptive update.
+    """
+
+    def __init__(
+        self,
+        parameters: Iterator[Parameter],
+        lr: float = 0.001,
+        betas: tuple[float, float] = (0.9, 0.999),
+        eps: float = 1e-8,
+        weight_decay: float = 0.01,
+    ) -> None:
+        super().__init__(parameters, lr)
+        self.beta1, self.beta2 = betas
+        self.eps = eps
+        self.wd = weight_decay
+        self.t = 0
+        self.m = [np.zeros_like(p.data) for p in self.params]
+        self.v = [np.zeros_like(p.data) for p in self.params]
+
+    def step(self) -> None:
+        self.t += 1
+        for p, m, v in zip(self.params, self.m, self.v):
+            if p.grad is not None:
+                m[...] = self.beta1 * m + (1 - self.beta1) * p.grad
+                v[...] = self.beta2 * v + (1 - self.beta2) * p.grad**2
+                m_hat = m / (1 - self.beta1**self.t)
+                v_hat = v / (1 - self.beta2**self.t)
+                p.data -= self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
+                p.data -= self.lr * self.wd * p.data

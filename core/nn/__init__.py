@@ -4,12 +4,14 @@ from .init import kaiming_uniform_, xavier_uniform_
 from .linear import Linear
 from .loss import BCELoss, CrossEntropyLoss, HuberLoss, L1Loss, MSELoss
 from .module import Module
-from .optim import AdaGrad, Momentum, NAG, RMSProp, SGD, Optimizer
+from .optim import NAG, SGD, AdaGrad, Adam, AdamW, Momentum, Optimizer, RMSProp
 from .parameter import Parameter
 from .sequential import Sequential
 
 __all__ = [
     "AdaGrad",
+    "Adam",
+    "AdamW",
     "BCELoss",
     "CrossEntropyLoss",
     "DataLoader",

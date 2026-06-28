@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from core.nn import AdaGrad, NAG, RMSProp, SGD, Momentum, Optimizer
+from core.nn import NAG, SGD, AdaGrad, Adam, AdamW, Momentum, Optimizer, RMSProp
 from core.nn.parameter import Parameter
 
 # =========================================================
@@ -399,3 +399,227 @@ class TestRMSProp:
             opt.step()
             losses.append(p.data.item() ** 2)
         assert losses[-1] < losses[0] * 0.01
+
+
+# =========================================================
+# 8. Correctness — Adam
+# =========================================================
+
+
+class TestAdam:
+    def test_first_step_bias_correction(self):
+        """At t=1, m_hat=g and v_hat=g², so step = lr * sign(g)."""
+        p = Parameter(np.array([1.0, 2.0]))
+        p.grad = np.array([0.5, -0.3])
+        opt = Adam([p], lr=0.1, betas=(0.9, 0.999), eps=1e-8)
+
+        opt.step()
+
+        # m = 0.9*0 + 0.1*[0.5, -0.3] = [0.05, -0.03]
+        # v = 0.999*0 + 0.001*[0.25, 0.09] = [0.00025, 0.00009]
+        # m_hat = [0.05,-0.03] / (1-0.9)    = [0.5, -0.3]
+        # v_hat = [2.5e-4,9e-5] / (1-0.999) = [0.25, 0.09]
+        # step  = 0.1 * [0.5, -0.3] / (sqrt[0.25,0.09] + eps)
+        #       = 0.1 * [0.5/0.5, -0.3/0.3] = [0.1, -0.1]
+        expected = np.array([1.0, 2.0]) - np.array([0.1, -0.1])
+        np.testing.assert_allclose(p.data, expected, atol=1e-6)
+
+    def test_bias_correction_decays(self):
+        """At t=2, correction factor (1-beta^t) is closer to 1."""
+        p = Parameter(np.array([0.0]))
+        p.grad = np.array([1.0])
+        opt = Adam([p], lr=0.1, betas=(0.9, 0.999), eps=1e-8)
+
+        opt.step()  # t=1: correction = 1/(1-0.9) = 10
+        data_t1 = p.data.copy()
+
+        p.grad = np.array([1.0])
+        opt.step()  # t=2: correction = 1/(1-0.9²) ≈ 5.26
+
+        # At t=2 the correction is weaker, so the step is smaller
+        step_t1 = abs(data_t1.item() - 0.0)  # first step size
+        step_t2 = abs(p.data.item() - data_t1.item())  # second step size
+        assert step_t2 < step_t1, "Bias correction decays, so later steps are smaller"
+
+    def test_moment_and_state_accumulate(self):
+        """m and v buffers carry over across steps and are not reset."""
+        p = Parameter(np.array([0.0]))
+        p.grad = np.array([1.0])
+        opt = Adam([p], lr=0.1, betas=(0.9, 0.999), eps=1e-8)
+
+        opt.step()
+        m_after_1 = opt.m[0].copy()
+
+        p.grad = np.array([1.0])
+        opt.step()
+        m_after_2 = opt.m[0].copy()
+
+        # m is an EWMA: m₂ = 0.9*m₁ + 0.1*g
+        np.testing.assert_allclose(
+            m_after_2,
+            0.9 * m_after_1 + 0.1 * np.array([1.0]),
+        )
+
+    def test_zero_grad_preserves_moment_buffers(self):
+        """zero_grad() clears gradient but leaves m and v intact."""
+        p = Parameter(np.array([1.0]))
+        p.grad = np.array([1.0])
+        opt = Adam([p], lr=0.1, betas=(0.9, 0.999))
+
+        opt.step()
+        m_before = opt.m[0].copy()
+        v_before = opt.v[0].copy()
+
+        opt.zero_grad()
+
+        np.testing.assert_array_equal(opt.m[0], m_before)
+        np.testing.assert_array_equal(opt.v[0], v_before)
+
+    def test_skip_parameter_with_none_grad(self):
+        """Parameter with grad=None is untouched; its m/v stay at 0."""
+        p1 = Parameter(np.array([1.0]))
+        p1.grad = np.array([0.5])
+        p2 = Parameter(np.array([2.0]))
+        p2.grad = None
+        opt = Adam([p1, p2], lr=0.1, betas=(0.9, 0.999))
+
+        opt.step()
+
+        np.testing.assert_allclose(p2.data, np.array([2.0]))
+        np.testing.assert_allclose(opt.m[1], np.array([0.0]))
+        np.testing.assert_allclose(opt.v[1], np.array([0.0]))
+
+    def test_per_parameter_adaptive_scaling(self):
+        """Different gradient magnitudes produce different adjusted_lr per dim."""
+        p = Parameter(np.array([0.0, 0.0]))
+        p.grad = np.array([1.0, 10.0])
+        opt = Adam([p], lr=0.1, betas=(0.9, 0.999), eps=1e-8)
+
+        opt.step()
+
+        # Both dims have same gradient direction (+), but dim1's larger
+        # gradient produces larger v, so its effective step / g is smaller.
+        # step1 / g1 and step2 / g2 should differ due to adaptive scaling.
+        step_dim0 = p.data[0].item()
+        step_dim1 = p.data[1].item()
+        # Both gradients are positive → both steps are negative
+        assert step_dim0 < 0.0
+        assert step_dim1 < 0.0
+        # But the per-gradient scaling differs: step/g for the larger dim
+        # should be smaller than for the smaller dim.
+        ratio_dim0 = abs(step_dim0) / 1.0
+        ratio_dim1 = abs(step_dim1) / 10.0
+        assert ratio_dim0 > ratio_dim1, (
+            "Per-param scaling weakens updates for large-gradient dimensions"
+        )
+
+    def test_converges_on_one_dimensional_quadratic(self):
+        """Adam decreases loss on f(x) = x².
+
+        Adam's adaptive normalization (lr * m̂ / √v̂) means the effective
+        step size is roughly lr * sign(g) early on.  As the gradient shrinks
+        near the optimum, adaptive scaling slows down — so we use more
+        steps than Momentum / AdaGrad to reach the same threshold.
+        """
+        p = Parameter(np.array([10.0]))
+        opt = Adam([p], lr=0.1, betas=(0.9, 0.999), eps=1e-8)
+
+        losses = []
+        for _ in range(500):
+            p.grad = np.array([2.0 * p.data.item()])
+            opt.step()
+            losses.append(p.data.item() ** 2)
+
+        assert losses[-1] < losses[0] * 0.01
+
+    def test_adam_is_optimizer(self):
+        assert isinstance(Adam([], lr=0.001), Optimizer)
+
+
+# =========================================================
+# 9. Correctness — AdamW
+# =========================================================
+
+
+class TestAdamW:
+    def test_first_step_with_weight_decay(self):
+        """After Adam update, weight decay is applied: data -= lr * wd * data."""
+        p = Parameter(np.array([1.0, 2.0]))
+        p.grad = np.array([0.5, -0.3])
+        opt = AdamW([p], lr=0.1, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.5)
+
+        opt.step()
+
+        # First compute expected Adam step (same as TestAdam)
+        m = np.array([0.05, -0.03])
+        v = np.array([0.00025, 0.00009])
+        m_hat = m / (1 - 0.9)
+        v_hat = v / (1 - 0.999)
+        adam_step = 0.1 * m_hat / (np.sqrt(v_hat) + 1e-8)
+        after_adam = np.array([1.0, 2.0]) - adam_step
+
+        # Then weight decay
+        wd_step = 0.1 * 0.5 * after_adam
+        expected = after_adam - wd_step
+
+        np.testing.assert_allclose(p.data, expected, atol=1e-6)
+
+    def test_weight_decay_zero_equiv_adam(self):
+        """weight_decay=0 makes AdamW identical to Adam."""
+        p_w = Parameter(np.array([5.0]))
+        p_w.grad = np.array([2.0])
+        p_a = Parameter(np.array([5.0]))
+        p_a.grad = np.array([2.0])
+        opt_w = AdamW([p_w], lr=0.1, betas=(0.9, 0.999), weight_decay=0.0)
+        opt_a = Adam([p_a], lr=0.1, betas=(0.9, 0.999))
+
+        opt_w.step()
+        opt_a.step()
+
+        np.testing.assert_allclose(p_w.data, p_a.data)
+
+    def test_weight_decay_pulls_toward_zero(self):
+        """With zero gradients, weight decay alone shrinks parameters."""
+        p_w = Parameter(np.array([1.0]))
+        p_w.grad = np.array([0.0])
+        p_a = Parameter(np.array([1.0]))
+        p_a.grad = np.array([0.0])
+        opt_w = AdamW([p_w], lr=0.1, betas=(0.9, 0.999), weight_decay=1.0)
+        opt_a = Adam([p_a], lr=0.1, betas=(0.9, 0.999))
+
+        opt_w.step()
+        opt_a.step()
+
+        # Adam: no gradient → no change → data stays at 1.0
+        # AdamW: applies weight decay even with zero grad → data shrinks
+        assert p_a.data.item() == 1.0
+        assert p_w.data.item() < 1.0
+
+    def test_skip_parameter_with_none_grad(self):
+        """grad=None means no Adam update AND no weight decay for that param."""
+        p1 = Parameter(np.array([1.0]))
+        p1.grad = np.array([0.5])
+        p2 = Parameter(np.array([2.0]))
+        p2.grad = None
+        opt = AdamW([p1, p2], lr=0.1, weight_decay=0.5)
+
+        opt.step()
+
+        np.testing.assert_allclose(p2.data, np.array([2.0]))
+        np.testing.assert_allclose(opt.m[1], np.array([0.0]))
+
+    def test_converges_on_one_dimensional_quadratic(self):
+        """AdamW decreases loss on f(x) = x² (with light weight decay)."""
+        p = Parameter(np.array([10.0]))
+        opt = AdamW([p], lr=0.1, betas=(0.9, 0.999), weight_decay=0.01)
+
+        losses = []
+        for _ in range(500):
+            p.grad = np.array([2.0 * p.data.item()])
+            opt.step()
+            losses.append(p.data.item() ** 2)
+
+        assert losses[-1] < losses[0] * 0.01
+
+    def test_adamw_is_optimizer(self):
+        assert isinstance(AdamW([], lr=0.001), Optimizer)
