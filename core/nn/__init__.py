@@ -1,4 +1,5 @@
 from .activation import ReLU, Sigmoid, Tanh
+from .clip import clip_grad_norm_, clip_grad_value_
 from .data import DataLoader
 from .init import kaiming_uniform_, xavier_uniform_
 from .linear import Linear
@@ -29,12 +30,12 @@ __all__ = [
     "LRScheduler",
     "MSELoss",
     "Module",
-    "Parameter",
     "Momentum",
     "NAG",
     "Optimizer",
-    "ReLU",
+    "Parameter",
     "RMSProp",
+    "ReLU",
     "SGD",
     "Sequential",
     "Sigmoid",
@@ -42,6 +43,8 @@ __all__ = [
     "Tanh",
     "Warmup",
     "WarmupCosine",
+    "clip_grad_norm_",
+    "clip_grad_value_",
     "kaiming_uniform_",
     "xavier_uniform_",
 ]

@@ -94,7 +94,7 @@ Gradient descent fails in predictable ways. Each technique is a targeted fix: di
     - [x] Adam → AdamW: momentum + adaptive scaling combined; then decoupled weight decay to fix a subtle L2 interaction bug
 - [ ] **Supporting Constraints** — what to do when the update alone isn't enough
     - [x] Learning rate schedules: step decay, cosine annealing, warmup — the same gradient, smaller or more timely steps
-    - [ ] Gradient clipping: norm clipping and value clipping — when a minibatch produces a pathological gradient
+    - [x] Gradient clipping: norm clipping and value clipping — when a minibatch produces a pathological gradient
     - [ ] Regularization: L1 (Laplace prior → sparsity), L2/Weight Decay (Gaussian prior → shrinkage)
 - [ ] **Applications**
     - [ ] Toy loss surface comparison (Beale / Rosenbrock) — watch optimizer behavior match theory
