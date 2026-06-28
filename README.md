@@ -89,7 +89,7 @@ Empirical distribution → theoretical distributions → information theory → 
 ### Phase 4: Optimization — from Gradient Descent to Adaptive Methods
 Gradient descent fails in predictable ways. Each technique is a targeted fix: diagnose the failure mode, implement the repair.
 - [ ] **Parameter Update Rules** — better step direction & per-parameter scaling
-    - [ ] SGD → Momentum → NAG: curriculum from vanilla steps to velocity-based updates, fighting ravine oscillation
+    - [x] SGD → Momentum → NAG: curriculum from vanilla steps to velocity-based updates, fighting ravine oscillation
     - [ ] AdaGrad → RMSProp: per-parameter scaling for varying curvatures, from full accumulation to sliding window
     - [ ] Adam → AdamW: momentum + adaptive scaling combined; then decoupled weight decay to fix a subtle L2 interaction bug
 - [ ] **Supporting Constraints** — what to do when the update alone isn't enough

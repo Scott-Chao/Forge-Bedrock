@@ -4,7 +4,7 @@ from .init import kaiming_uniform_, xavier_uniform_
 from .linear import Linear
 from .loss import BCELoss, CrossEntropyLoss, HuberLoss, L1Loss, MSELoss
 from .module import Module
-from .optim import SGD
+from .optim import NAG, SGD, Momentum, Optimizer
 from .parameter import Parameter
 from .sequential import Sequential
 
@@ -18,6 +18,9 @@ __all__ = [
     "MSELoss",
     "Module",
     "Parameter",
+    "Momentum",
+    "NAG",
+    "Optimizer",
     "ReLU",
     "SGD",
     "Sequential",
