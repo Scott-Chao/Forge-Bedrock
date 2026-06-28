@@ -7,8 +7,6 @@ evolution of first-order optimization methods.
 Implementations follow the PyTorch optimizer convention.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator
 
 import numpy as np
@@ -109,30 +107,23 @@ class Momentum(Optimizer):
 
 
 class NAG(Optimizer):
-    """Nesterov Accelerated Gradient optimizer — look-ahead correction.
+    """NAG optimizer — Nesterov Accelerated Gradient with look-ahead correction.
 
-    The textbook NAG (Sutskever et al., 2013) evaluates the gradient at
-    an approximate future position rather than the current one:
+    Textbook NAG (Sutskever et al., 2013) evaluates the gradient at an
+    approximate future position:
 
-        lookahead = theta - beta * v
-        v_new = beta * v + lr * grad(lookahead)
+        v_new = beta * v + lr * grad(theta - beta * v)
         theta -= v_new
 
-    However, our autograd already computed grad(theta), not grad(lookahead).
-    The trick: a change of variables makes the update equivalent while using
-    only the available gradient.  The PyTorch-style parameterization is:
+    We implement the PyTorch-style parameterization that uses only the
+    already-computed gradient (a change of variables makes it equivalent):
 
-        v_new = beta * v + lr * g                         # same as Momentum
+        v_new = beta * v + lr * g
         theta -= beta * v_new + lr * g                     # Nesterov correction
 
-    The correction term (beta * v_new) decelerates v before overshooting:
-    if v_new points downhill but the lookahead would overshoot, the beta
-    scaling of v_new adds a counteracting component.
-
-    Intuition: standard momentum barrels downhill and only discovers it
-    overshot after the fact.  NAG "peeks ahead" — if the lookahead has
-    started climbing the opposite wall, the gradient correction already
-    points backward, so deceleration happens *before* the overshoot.
+    The extra beta * v_new term decelerates v *before* overshooting:
+    if the lookahead has started climbing the opposite ravine wall,
+    the gradient correction already points backward.
 
     Theory: NAG achieves O(1/k²) convergence for smooth convex functions,
     versus O(1/k) for standard momentum.
@@ -167,33 +158,25 @@ class NAG(Optimizer):
 class AdaGrad(Optimizer):
     """AdaGrad optimizer — per-parameter adaptive learning rates.
 
-    AdaGrad scales the learning rate for each parameter *inversely* to
-    the square root of the sum of its past squared gradients:
+    Scales the learning rate for each parameter *inversely* to the
+    accumulated magnitude of its past gradients:
 
         cache += g²
         theta -= lr / (sqrt(cache) + eps) * g
 
-    Parameters that have received large gradients are closer to being
-    well-optimised (or lie on a steep slope), so their step size is
-    suppressed.  Parameters with small gradients get larger updates.
+    This is diagonal preconditioning: diag(1/√cache) approximates inverse
+    curvature, analogous to the Hessian in Newton's method but at trivial cost.
 
-    This is a form of diagonal preconditioning: diag(1 / sqrt(cache))
-    approximates the inverse curvature, analogous to what the Hessian
-    provides in Newton's method but at trivial cost.
-
-    Limitations
-    -----------
-    cache is monotonic (it sums squares, never decreases), so the
-    effective learning rate *lr / sqrt(cache)* tends to zero over time.
-    This is fine for convex problems but often kills learning before
-    convergence in deep networks.
+    Limitation: cache grows monotonically → effective LR tends to zero.
+    Fine for convex problems but often kills learning before convergence
+    in deep networks.
 
     Parameters
     ----------
     parameters : iterable of Parameter
         The model parameters to optimize.
     lr : float, default=0.01
-        Global learning rate.  AdaGrad is often used with lr ~ 0.01.
+        Global learning rate.  Often used with lr ~ 0.01.
     eps : float, default=1e-8
         Small constant for numerical stability when cache is near zero.
     """
@@ -219,24 +202,18 @@ class AdaGrad(Optimizer):
 class RMSProp(Optimizer):
     """RMSProp optimizer — adaptive learning rates with sliding window.
 
-    RMSProp fixes AdaGrad's monotonic decay by replacing the full sum of
-    squared gradients with an exponentially weighted moving average (EWMA):
+    Fixes AdaGrad's monotonic decay by replacing the full sum of squared
+    gradients with an exponentially weighted moving average (EWMA):
 
         cache = beta * cache + (1 - beta) * g²
         theta -= lr / (sqrt(cache) + eps) * g
 
-    The EWMA gives RMSProp a *sliding window* over recent gradient history.
-    When gradient magnitudes shrink (e.g. after passing a steep region),
-    the cache decays and the learning rate recovers — something AdaGrad
-    cannot do because its cache only grows.
+    When gradient magnitudes shrink (e.g. after a steep region), the
+    cache decays and LR recovers — something AdaGrad cannot do.
 
-    Effective window length ≈ 1 / (1 - beta) steps:
-        beta = 0.9   →   ~10 steps
+    Effective window ≈ 1 / (1 - beta) steps:
+        beta = 0.9   →  ~10 steps
         beta = 0.99  →  ~100 steps
-        beta = 0.999 → ~1000 steps (rarely used, very slow adaptation)
-
-    Typically the same update rule is written without the (1 - beta) factor
-    in PyTorch — check the source to see why this convention varies.
 
     Parameters
     ----------
@@ -245,8 +222,7 @@ class RMSProp(Optimizer):
     lr : float, default=0.001
         Global learning rate.  Typical range [0.0001, 0.01].
     beta : float, default=0.9
-        Decay rate for the EWMA.  Controls how far back the cache
-        remembers squared gradients.
+        Decay rate for the EWMA.
     eps : float, default=1e-8
         Small constant for numerical stability.
     """
@@ -274,37 +250,28 @@ class RMSProp(Optimizer):
 class Adam(Optimizer):
     """Adam optimizer — adaptive moment estimation.
 
-    Adam combines Momentum-style velocity smoothing with RMSProp-style
-    per-parameter adaptive scaling, plus bias correction to counteract
-    zero initialization:
+    Combines Momentum-style velocity smoothing with RMSProp-style
+    per-parameter adaptive scaling, plus bias correction:
 
-        m = beta1 * m + (1 - beta1) * g              # biased 1st moment (mean)
-        v = beta2 * v + (1 - beta2) * g**2            # biased 2nd moment (uncentered var)
+        m = beta1 * m + (1 - beta1) * g              # 1st moment (velocity)
+        v = beta2 * v + (1 - beta2) * g**2            # 2nd moment (uncentered var)
 
         m_hat = m / (1 - beta1**t)                    # bias correction
         v_hat = v / (1 - beta2**t)
 
-        theta -= lr * m_hat / (sqrt(v_hat) + eps)    # update
+        theta -= lr * m_hat / (sqrt(v_hat) + eps)    # adaptive step
 
-    Intuition: m is the direction (smoothed gradient), v is the step-size
-    scaler (inverse RMS of recent gradients).  Together they give a robust,
-    per-parameter adaptive update that works well across a huge range of
-    problems with minimal tuning.
-
-    Bias correction is critical in early steps: without it, m and v are
-    both biased heavily toward zero at t=1, producing vanishingly small
-    updates.  The correction decays to 1 as t grows.
+    Bias correction is critical at t=1: m and v are biased toward zero
+    (m₁ ≈ 0.1g when β₁=0.9), producing vanishingly small updates without it.
 
     Parameters
     ----------
     parameters : iterable of Parameter
         The model parameters to optimize.
     lr : float, default=0.001
-        Learning rate.  Adam's default (0.001) works well across many tasks.
+        Learning rate.  0.001 works well across many tasks.
     betas : tuple of float, default=(0.9, 0.999)
-        Coefficients for computing running averages of gradient and its square.
-        beta1 controls the momentum window (~10 steps), beta2 controls the
-        squared-gradient window (~1000 steps).
+        Coefficients for running averages of gradient and its square.
     eps : float, default=1e-8
         Small constant for numerical stability.
     """
@@ -334,25 +301,16 @@ class Adam(Optimizer):
                 p.data -= self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
 
 
-class AdamW(Optimizer):
-    """AdamW optimizer — Adam with decoupled weight decay.
+class AdamW(Adam):
+    """AdamW — Adam with decoupled weight decay.
 
-    AdamW fixes a subtle but important interaction in the original Adam:
-    when L2 regularization is implemented via +lambda*theta on the gradient,
-    the weight-decay term gets scaled by the *adaptive learning rate*
-    (m_hat / sqrt(v_hat)).  This means:
+    AdamW fixes a subtle interaction in the original Adam: when L2
+    regularization (+λθ on the gradient) is passed through the adaptive
+    scaler (m̂/√v̂), the regularization becomes non-uniform — parameters
+    with large recent gradients get *more* shrinkage.  AdamW decouples:
 
-        - parameters with large recent gradients get MORE regularization
-        - parameters with small recent gradients get LESS regularization
-
-    This is wrong: weight decay should be a *uniform* shrinkage, not an
-    adaptive one.  AdamW decouples the two operations:
-
-        theta -= lr * (m_hat / (sqrt(v_hat) + eps))     # Adam update
-        theta -= lr * wd * theta                         # decoupled weight decay
-
-    The weight decay is applied *after* the gradient-based step, using a
-    fixed proportion (lr * wd) that is the same for every parameter.
+        theta -= lr * (m_hat / (sqrt(v_hat) + eps))     # Adam update (inherited)
+        theta -= lr * wd * theta                         # uniform weight decay
 
     Parameters
     ----------
@@ -365,8 +323,8 @@ class AdamW(Optimizer):
     eps : float, default=1e-8
         Small constant for numerical stability.
     weight_decay : float, default=0.01
-        Weight decay coefficient (lambda).  Applied uniformly to every
-        parameter after the adaptive update.
+        Weight decay coefficient.  Applied uniformly to every active
+        parameter after the adaptive step.
     """
 
     def __init__(
@@ -377,21 +335,11 @@ class AdamW(Optimizer):
         eps: float = 1e-8,
         weight_decay: float = 0.01,
     ) -> None:
-        super().__init__(parameters, lr)
-        self.beta1, self.beta2 = betas
-        self.eps = eps
+        super().__init__(parameters, lr, betas, eps)
         self.wd = weight_decay
-        self.t = 0
-        self.m = [np.zeros_like(p.data) for p in self.params]
-        self.v = [np.zeros_like(p.data) for p in self.params]
 
     def step(self) -> None:
-        self.t += 1
-        for p, m, v in zip(self.params, self.m, self.v):
+        super().step()
+        for p in self.params:
             if p.grad is not None:
-                m[...] = self.beta1 * m + (1 - self.beta1) * p.grad
-                v[...] = self.beta2 * v + (1 - self.beta2) * p.grad**2
-                m_hat = m / (1 - self.beta1**self.t)
-                v_hat = v / (1 - self.beta2**self.t)
-                p.data -= self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
                 p.data -= self.lr * self.wd * p.data

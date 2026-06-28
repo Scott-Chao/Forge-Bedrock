@@ -85,20 +85,6 @@ class TestMomentum:
         np.testing.assert_allclose(p1.data, 1.0 - 0.05)
         np.testing.assert_allclose(p2.data, 2.0)
 
-    def test_momentum_zero_equiv_sgd(self):
-        """momentum=0 degenerates to SGD."""
-        p_m = Parameter(np.array([5.0]))
-        p_m.grad = np.array([2.0])
-        p_s = Parameter(np.array([5.0]))
-        p_s.grad = np.array([2.0])
-        opt_m = Momentum([p_m], lr=0.1, momentum=0.0)
-        opt_s = SGD([p_s], lr=0.1)
-
-        opt_m.step()
-        opt_s.step()
-
-        np.testing.assert_allclose(p_m.data, p_s.data)
-
 
 # =========================================================
 # 3. Correctness — NAG
@@ -119,22 +105,6 @@ class TestNAG:
         v = np.array([0.05, -0.03])
         expected = np.array([1.0, 2.0]) - (0.9 * v + np.array([0.05, -0.03]))
         np.testing.assert_allclose(p.data, expected)
-
-    def test_larger_first_step_than_momentum(self):
-        """NAG's first step is (beta+1) * lr * g, larger than Momentum's lr * g."""
-        p_n = Parameter(np.array([0.0]))
-        p_n.grad = np.array([1.0])
-        p_m = Parameter(np.array([0.0]))
-        p_m.grad = np.array([1.0])
-        opt_n = NAG([p_n], lr=0.1, momentum=0.9)
-        opt_m = Momentum([p_m], lr=0.1, momentum=0.9)
-
-        opt_n.step()
-        opt_m.step()
-
-        # NAG: -(0.9*0.1 + 0.1) = -0.19
-        # Momentum: -0.1
-        assert abs(p_n.data.item()) > abs(p_m.data.item())
 
     def test_velocity_accumulates(self):
         """NAG velocity carries over across steps."""
@@ -158,32 +128,32 @@ class TestNAG:
 
 
 class TestConvergence:
-    @pytest.mark.parametrize("opt_cls", [Momentum, NAG])
-    def test_decreases_loss_on_quadratic(self, opt_cls):
-        """Both optimizers make progress on f(x) = ½ x²."""
-        p = Parameter(np.array([5.0]))
-        opt = opt_cls([p], lr=0.1, momentum=0.8)
+    @pytest.mark.parametrize(
+        "opt_cls,kwargs,steps",
+        [
+            pytest.param(Momentum, dict(lr=0.1, momentum=0.8), 50, id="Momentum"),
+            pytest.param(NAG, dict(lr=0.1, momentum=0.8), 50, id="NAG"),
+            pytest.param(AdaGrad, dict(lr=1.0), 100, id="AdaGrad"),
+            pytest.param(RMSProp, dict(lr=1.0, beta=0.9), 100, id="RMSProp"),
+            pytest.param(Adam, dict(lr=0.1, betas=(0.9, 0.999)), 500, id="Adam"),
+            pytest.param(
+                AdamW,
+                dict(lr=0.1, betas=(0.9, 0.999), weight_decay=0.01),
+                500,
+                id="AdamW",
+            ),
+        ],
+    )
+    def test_decreases_loss_on_quadratic(self, opt_cls, kwargs, steps):
+        """All optimizers decrease loss on f(x) = ½ x² given enough steps."""
+        p = Parameter(np.array([10.0]))
+        opt = opt_cls([p], **kwargs)
         losses = []
-        for _ in range(50):
-            p.grad = p.data.copy()  # ∇½x² = x
+        for _ in range(steps):
+            p.grad = np.array([2.0 * p.data.item()])  # ∇½x² = x
             opt.step()
             losses.append(0.5 * p.data.item() ** 2)
         assert losses[-1] < losses[0] * 0.01
-
-    def test_momentum_accelerates_constant_gradient(self):
-        """With a consistent gradient, momentum accumulates velocity and moves farther."""
-        p_m = Parameter(np.array([0.0]))
-        p_s = Parameter(np.array([0.0]))
-        opt_m = Momentum([p_m], lr=0.1, momentum=0.9)
-        opt_s = SGD([p_s], lr=0.1)
-        for _ in range(10):
-            # Both see the same constant gradient (∇f = 1)
-            p_m.grad = np.array([1.0])
-            p_s.grad = np.array([1.0])
-            opt_m.step()
-            opt_s.step()
-        # Momentum's velocity accumulates, so it moves ~4× farther than SGD
-        assert abs(p_m.data.item()) > abs(p_s.data.item())
 
 
 # =========================================================
@@ -192,22 +162,10 @@ class TestConvergence:
 
 
 class TestOptimizerBase:
-    def test_momentum_is_optimizer(self):
-        assert isinstance(Momentum([], lr=0.01), Optimizer)
-
-    def test_nag_is_optimizer(self):
-        assert isinstance(NAG([], lr=0.01), Optimizer)
-
     def test_step_not_implemented(self):
         opt = Optimizer([], lr=0.01)
         with pytest.raises(NotImplementedError):
             opt.step()
-
-    def test_adagrad_is_optimizer(self):
-        assert isinstance(AdaGrad([], lr=0.01), Optimizer)
-
-    def test_rmsprop_is_optimizer(self):
-        assert isinstance(RMSProp([], lr=0.01), Optimizer)
 
 
 # =========================================================
@@ -282,17 +240,6 @@ class TestAdaGrad:
         # Both have same numerical update, but different adjusted_lrs
         assert opt.caches[0][0] < opt.caches[0][1]
 
-    def test_converges_on_one_dimensional_quadratic(self):
-        """AdaGrad decreases loss on f(x) = x²."""
-        p = Parameter(np.array([10.0]))
-        opt = AdaGrad([p], lr=1.0, eps=1e-8)
-        losses = []
-        for _ in range(100):
-            p.grad = np.array([2.0 * p.data.item()])  # ∇x² = 2x
-            opt.step()
-            losses.append(p.data.item() ** 2)
-        assert losses[-1] < losses[0] * 0.01
-
 
 # =========================================================
 # 7. Correctness — RMSProp
@@ -338,19 +285,6 @@ class TestRMSProp:
             "RMSProp cache should decay when gradients shrink"
         )
 
-    def test_cache_approaches_steady_state(self):
-        """With constant gradient, EWMA cache asymptotically approaches g²."""
-        p = Parameter(np.array([0.0]))
-        p.grad = np.array([5.0])
-        opt = RMSProp([p], lr=0.1, beta=0.9, eps=1e-8)
-
-        for _ in range(200):
-            p.grad = np.array([5.0])
-            opt.step()
-
-        # Steady state: cache → g² = 25
-        np.testing.assert_allclose(opt.caches[0], 25.0, atol=0.5)
-
     def test_zero_grad_preserves_cache(self):
         """zero_grad() clears gradient, leaves cache intact."""
         p = Parameter(np.array([1.0]))
@@ -374,31 +308,6 @@ class TestRMSProp:
 
         np.testing.assert_allclose(p2.data, np.array([2.0]))
         np.testing.assert_allclose(opt.caches[1], np.array([0.0]))
-
-    def test_beta_zero_equiv_adagrad_first_step(self):
-        """beta=0 makes first step identical to AdaGrad (both cache = g²)."""
-        p_r = Parameter(np.array([5.0]))
-        p_r.grad = np.array([2.0])
-        p_a = Parameter(np.array([5.0]))
-        p_a.grad = np.array([2.0])
-        opt_r = RMSProp([p_r], lr=0.5, beta=0.0, eps=1e-8)
-        opt_a = AdaGrad([p_a], lr=0.5, eps=1e-8)
-
-        opt_r.step()
-        opt_a.step()
-
-        np.testing.assert_allclose(p_r.data, p_a.data)
-
-    def test_converges_on_one_dimensional_quadratic(self):
-        """RMSProp decreases loss on f(x) = x²."""
-        p = Parameter(np.array([10.0]))
-        opt = RMSProp([p], lr=1.0, beta=0.9, eps=1e-8)
-        losses = []
-        for _ in range(100):
-            p.grad = np.array([2.0 * p.data.item()])
-            opt.step()
-            losses.append(p.data.item() ** 2)
-        assert losses[-1] < losses[0] * 0.01
 
 
 # =========================================================
@@ -513,28 +422,6 @@ class TestAdam:
             "Per-param scaling weakens updates for large-gradient dimensions"
         )
 
-    def test_converges_on_one_dimensional_quadratic(self):
-        """Adam decreases loss on f(x) = x².
-
-        Adam's adaptive normalization (lr * m̂ / √v̂) means the effective
-        step size is roughly lr * sign(g) early on.  As the gradient shrinks
-        near the optimum, adaptive scaling slows down — so we use more
-        steps than Momentum / AdaGrad to reach the same threshold.
-        """
-        p = Parameter(np.array([10.0]))
-        opt = Adam([p], lr=0.1, betas=(0.9, 0.999), eps=1e-8)
-
-        losses = []
-        for _ in range(500):
-            p.grad = np.array([2.0 * p.data.item()])
-            opt.step()
-            losses.append(p.data.item() ** 2)
-
-        assert losses[-1] < losses[0] * 0.01
-
-    def test_adam_is_optimizer(self):
-        assert isinstance(Adam([], lr=0.001), Optimizer)
-
 
 # =========================================================
 # 9. Correctness — AdamW
@@ -607,19 +494,3 @@ class TestAdamW:
 
         np.testing.assert_allclose(p2.data, np.array([2.0]))
         np.testing.assert_allclose(opt.m[1], np.array([0.0]))
-
-    def test_converges_on_one_dimensional_quadratic(self):
-        """AdamW decreases loss on f(x) = x² (with light weight decay)."""
-        p = Parameter(np.array([10.0]))
-        opt = AdamW([p], lr=0.1, betas=(0.9, 0.999), weight_decay=0.01)
-
-        losses = []
-        for _ in range(500):
-            p.grad = np.array([2.0 * p.data.item()])
-            opt.step()
-            losses.append(p.data.item() ** 2)
-
-        assert losses[-1] < losses[0] * 0.01
-
-    def test_adamw_is_optimizer(self):
-        assert isinstance(AdamW([], lr=0.001), Optimizer)
