@@ -97,8 +97,8 @@ Gradient descent fails in predictable ways. Each technique is a targeted fix: di
     - [x] Gradient clipping: norm clipping and value clipping — when a minibatch produces a pathological gradient
     - [x] Regularization: L1 (Laplace prior → sparsity), L2/Weight Decay (Gaussian prior → shrinkage)
 - [ ] **Applications**
-    - [ ] Toy loss surface comparison (Beale / Rosenbrock) — watch optimizer behavior match theory
-    - [ ] Demo: train the same classifier with SGD, Momentum, Adam — compare convergence curves
+    - [x] Toy loss surface comparison (Beale / Rosenbrock) — watch optimizer behavior match theory
+    - [ ] Train the same classifier with SGD, Momentum, Adam — compare convergence curves
 
 ---
 
