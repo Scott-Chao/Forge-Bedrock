@@ -29,10 +29,12 @@ forge-bedrock/
 - Use **ruff** for linting (`ruff check .`), keeping code consistent
 - Class names in `PascalCase` (`Matrix`, `LU`, `SVD`), methods/variables in `snake_case`
 - Comments should explain WHY, not WHAT (well-named code is self-documenting)
-- Dependencies: use NumPy for underlying array storage only; do not rely on scipy or other scientific computing libraries
+- Dependencies:
+  - **Phase 1-4**: NumPy-only — no scipy or other scientific libraries
+  - **Phase 5+**: PyTorch (including `torch.nn`, `torch.optim`, etc.) — the focus shifts from re-implementing foundations to exploring higher-level architectures on a professional framework
 
 ## Testing
 
 - Use **pytest**; test files live under `tests/`
 - Tests should be added after completing each feature
-- Run tests: `pytest tests/`
+- Run tests: `python -m pytest tests/`

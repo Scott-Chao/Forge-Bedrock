@@ -100,11 +100,40 @@ Gradient descent fails in predictable ways. Each technique is a targeted fix: di
     - [x] Toy loss surface comparison (Beale / Rosenbrock) — watch optimizer behavior match theory
     - [x] Train the same classifier with SGD, Momentum, Adam — compare convergence curves
 
+### Phase 5: Transformer — Mini-GPT
+Build a Decoder-Only Transformer (GPT-family) on PyTorch. First-principles minimal set — each component is the irreducible core; optimizations are added on top after the base works.
+
+- [ ] **Attention Core** — the operation that makes Transformers work
+    - [ ] `scaled_dot_product_attention`: $\text{softmax}(QK^T / \sqrt{d_k}) V$, with causal masking
+    - [ ] `MultiHeadAttention`: parallel heads with learned projections $W^Q, W^K, W^V, W^O$
+- [ ] **Standard Components** — Pre-Norm block, FeedForward, Positional Encoding
+    - [ ] `RMSNorm`: $\gamma \odot x / \sqrt{\text{mean}(x^2) + \epsilon}$ — the minimal norm that works
+    - [ ] `ReLU FeedForward`: $d_{model} \to d_{ff} \to d_{model}$, $d_{ff}=4d_{model}$
+    - [ ] `RoPE` (Rotary Positional Encoding): relative position via rotation matrix $R_\Theta^d$
+    - [ ] `GPTBlock`: RMSNorm → Attention → RMSNorm → FFN + Residual (Pre-Norm)
+- [ ] **GPT Architecture** — the language model skeleton
+    - [ ] Token Embedding: char → embedding lookup (vocab_size ~70 for char-level)
+    - [ ] `GPT`: $N$ stacked GPTBlocks + final RMSNorm + output projection
+    - [ ] Weight initialization: $\mathcal{N}(0, 0.02)$, following GPT-2 scaling
+- [ ] **Inference & Sampling** — making the model generate
+    - [ ] `generate()`: step-by-step autoregressive decoding
+    - [ ] Sampling: $\text{argmax}$ → Temperature → Top-k → Top-p (nucleus)
+    - [ ] [Extension] KV Cache — $O(n^2) \to O(n)$ optimization
+- [ ] **Training Pipeline** — learning language from scratch
+    - [ ] Char-level corpus (TinyShakespeare / text8 / zhihu-snippets), no tokenizer, vocab_size ~70
+    - [ ] Warmup + Cosine LR schedule (reuse Phase 4 understanding, now in PyTorch)
+    - [ ] Perplexity monitoring + periodic sample outputs
+- [ ] **Analysis Notebooks** — understanding what you built
+    - [ ] Attention pattern + RoPE heatmap visualization
+    - [ ] Temperature / Top-k / Top-p sampling comparison
+    - [ ] In-Context Learning demo & completion examples
+
 ---
 
 ## 📚 Technical Stack
 *   **Language**: Python 3.x
 *   **Core Library**: NumPy (used for N-dimensional array storage and basic vectorized arithmetic).
+*   **Deep Learning Framework**: PyTorch (Phase 5+, for tensor computation and neural network modules).
 *   **Visualization**: Matplotlib (for convergence plots and decomposition results).
 
 ---

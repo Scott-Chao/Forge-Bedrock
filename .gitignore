@@ -17,5 +17,3 @@ assets/*
 !assets/pku_boya.jpg
 
 .claude/*
-!.claude/skills/
-!.claude/skills/**
