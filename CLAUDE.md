@@ -17,7 +17,7 @@ forge-bedrock/
 ├── core/         # Foundational library implementations
 │   ├── linalg/   # Linear algebra (Matrix class, decompositions, solvers, PCA, broadcast)
 │   ├── autograd/ # Reverse-mode autograd engine (Value, functional, viz)
-│   ├── nn/       # Neural network modules (layers, loss, optim, data, init, sequential)
+│   ├── nn/       # Neural network modules (layers, loss, optim, clip, lr_scheduler, regularizer)
 │   └── prob/     # Probability, info theory, bias-variance decomposition
 ├── apps/         # Jupyter notebooks demonstrating each component
 ├── tests/        # pytest tests mirroring core/ structure
