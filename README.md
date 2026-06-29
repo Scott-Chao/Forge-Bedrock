@@ -96,9 +96,9 @@ Gradient descent fails in predictable ways. Each technique is a targeted fix: di
     - [x] Learning rate schedules: step decay, cosine annealing, warmup — the same gradient, smaller or more timely steps
     - [x] Gradient clipping: norm clipping and value clipping — when a minibatch produces a pathological gradient
     - [x] Regularization: L1 (Laplace prior → sparsity), L2/Weight Decay (Gaussian prior → shrinkage)
-- [ ] **Applications**
+- [x] **Applications**
     - [x] Toy loss surface comparison (Beale / Rosenbrock) — watch optimizer behavior match theory
-    - [ ] Train the same classifier with SGD, Momentum, Adam — compare convergence curves
+    - [x] Train the same classifier with SGD, Momentum, Adam — compare convergence curves
 
 ---
 
