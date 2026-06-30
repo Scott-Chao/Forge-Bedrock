@@ -111,10 +111,9 @@ Build a Decoder-Only Transformer (GPT-family) on PyTorch. First-principles minim
     - [x] `ReLU FeedForward`: $d_{model} \to d_{ff} \to d_{model}$, $d_{ff}=4d_{model}$
     - [x] `RoPE` (Rotary Positional Encoding): relative position via rotation matrix $R_\Theta^d$
     - [x] `GPTBlock`: RMSNorm → Attention → RMSNorm → FFN + Residual (Pre-Norm)
-- [ ] **GPT Architecture** — the language model skeleton
+- [x] **GPT Architecture** — the language model skeleton
     - [x] Token Embedding: char → embedding lookup (vocab_size ~70 for char-level)
-    - [ ] `GPT`: $N$ stacked GPTBlocks + final RMSNorm + output projection
-    - [ ] Weight initialization: $\mathcal{N}(0, 0.02)$, following GPT-2 scaling
+    - [x] `GPT`: $N$ stacked GPTBlocks + final RMSNorm + output projection
 - [ ] **Inference & Sampling** — making the model generate
     - [ ] `generate()`: step-by-step autoregressive decoding
     - [ ] Sampling: $\text{argmax}$ → Temperature → Top-k → Top-p (nucleus)

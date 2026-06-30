@@ -9,6 +9,7 @@ from core.transformer.attention import MultiHeadAttention, scaled_dot_product_at
 from core.transformer.block import GPTBlock
 from core.transformer.embedding import CharTokenizer, TokenEmbedding
 from core.transformer.feedforward import FeedForward
+from core.transformer.gpt import GPT
 from core.transformer.normalization import RMSNorm
 from core.transformer.positional import (
     RotaryEmbedding,
@@ -27,4 +28,5 @@ __all__ = [
     "GPTBlock",
     "CharTokenizer",
     "TokenEmbedding",
+    "GPT",
 ]
