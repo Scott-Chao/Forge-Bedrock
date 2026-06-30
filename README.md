@@ -103,9 +103,9 @@ Gradient descent fails in predictable ways. Each technique is a targeted fix: di
 ### Phase 5: Transformer — Mini-GPT
 Build a Decoder-Only Transformer (GPT-family) on PyTorch. First-principles minimal set — each component is the irreducible core; optimizations are added on top after the base works.
 
-- [ ] **Attention Core** — the operation that makes Transformers work
+- [x] **Attention Core** — the operation that makes Transformers work
     - [x] `scaled_dot_product_attention`: $\text{softmax}(QK^T / \sqrt{d_k}) V$, with causal masking
-    - [ ] `MultiHeadAttention`: parallel heads with learned projections $W^Q, W^K, W^V, W^O$
+    - [x] `MultiHeadAttention`: parallel heads with learned projections $W^Q, W^K, W^V, W^O$
 - [ ] **Standard Components** — Pre-Norm block, FeedForward, Positional Encoding
     - [ ] `RMSNorm`: $\gamma \odot x / \sqrt{\text{mean}(x^2) + \epsilon}$ — the minimal norm that works
     - [ ] `ReLU FeedForward`: $d_{model} \to d_{ff} \to d_{model}$, $d_{ff}=4d_{model}$
