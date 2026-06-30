@@ -18,6 +18,7 @@ import math
 
 import torch
 import torch.nn.functional as F
+from core.transformer.positional import RotaryEmbedding
 
 
 def scaled_dot_product_attention(
@@ -122,6 +123,7 @@ class MultiHeadAttention(torch.nn.Module):
         key: torch.Tensor,
         value: torch.Tensor,
         mask: torch.Tensor | None = None,
+        rope: RotaryEmbedding | None = None,
     ) -> torch.Tensor:
         """Forward pass for multi-head attention.
 
@@ -131,6 +133,9 @@ class MultiHeadAttention(torch.nn.Module):
         key   : (batch_size, seq_len, d_model)
         value : (batch_size, seq_len, d_model)
         mask  : (seq_len, seq_len) or broadcastable — True = allowed
+        rope  : RotaryEmbedding | None, optional
+            If provided, applies rotary position encoding to Q and K
+            after reshaping into multi-head form.
 
         Returns
         -------
@@ -144,6 +149,11 @@ class MultiHeadAttention(torch.nn.Module):
         q = q.reshape(batch, -1, self.n_heads, self.d_k).transpose(1, 2)
         k = k.reshape(batch, -1, self.n_heads, self.d_k).transpose(1, 2)
         v = v.reshape(batch, -1, self.n_heads, self.d_k).transpose(1, 2)
+
+        # ── RoPE: rotate Q and K in their per-head space ──────────────
+        if rope is not None:
+            q = rope(q)
+            k = rope(k)
 
         out = scaled_dot_product_attention(q, k, v, mask)
 

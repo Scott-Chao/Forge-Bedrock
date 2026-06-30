@@ -106,11 +106,11 @@ Build a Decoder-Only Transformer (GPT-family) on PyTorch. First-principles minim
 - [x] **Attention Core** — the operation that makes Transformers work
     - [x] `scaled_dot_product_attention`: $\text{softmax}(QK^T / \sqrt{d_k}) V$, with causal masking
     - [x] `MultiHeadAttention`: parallel heads with learned projections $W^Q, W^K, W^V, W^O$
-- [ ] **Standard Components** — Pre-Norm block, FeedForward, Positional Encoding
+- [x] **Standard Components** — Pre-Norm block, FeedForward, Positional Encoding
     - [x] `RMSNorm`: $\gamma \odot x / \sqrt{\text{mean}(x^2) + \epsilon}$ — the minimal norm that works
     - [x] `ReLU FeedForward`: $d_{model} \to d_{ff} \to d_{model}$, $d_{ff}=4d_{model}$
     - [x] `RoPE` (Rotary Positional Encoding): relative position via rotation matrix $R_\Theta^d$
-    - [ ] `GPTBlock`: RMSNorm → Attention → RMSNorm → FFN + Residual (Pre-Norm)
+    - [x] `GPTBlock`: RMSNorm → Attention → RMSNorm → FFN + Residual (Pre-Norm)
 - [ ] **GPT Architecture** — the language model skeleton
     - [ ] Token Embedding: char → embedding lookup (vocab_size ~70 for char-level)
     - [ ] `GPT`: $N$ stacked GPTBlocks + final RMSNorm + output projection

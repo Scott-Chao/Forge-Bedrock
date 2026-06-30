@@ -6,6 +6,7 @@ component from first principles using PyTorch.
 """
 
 from core.transformer.attention import MultiHeadAttention, scaled_dot_product_attention
+from core.transformer.block import GPTBlock
 from core.transformer.feedforward import FeedForward
 from core.transformer.normalization import RMSNorm
 from core.transformer.positional import (
@@ -22,4 +23,5 @@ __all__ = [
     "precompute_freqs_cis",
     "apply_rotary_emb",
     "RotaryEmbedding",
+    "GPTBlock",
 ]
