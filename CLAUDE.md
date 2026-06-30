@@ -18,7 +18,8 @@ forge-bedrock/
 │   ├── linalg/   # Linear algebra (Matrix class, decompositions, solvers, PCA, broadcast)
 │   ├── autograd/ # Reverse-mode autograd engine (Value, functional, viz)
 │   ├── nn/       # Neural network modules (layers, loss, optim, clip, lr_scheduler, regularizer)
-│   └── prob/     # Probability, info theory, bias-variance decomposition
+│   ├── prob/     # Probability, info theory, bias-variance decomposition
+│   └── transformer/  # Transformer building blocks (attention, GPT, etc.) — Phase 5+
 ├── apps/         # Jupyter notebooks demonstrating each component
 ├── tests/        # pytest tests mirroring core/ structure
 └── assets/       # Static resources (images, etc.)
