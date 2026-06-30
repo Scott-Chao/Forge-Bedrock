@@ -6,8 +6,10 @@ component from first principles using PyTorch.
 """
 
 from core.transformer.attention import MultiHeadAttention, scaled_dot_product_attention
+from core.transformer.normalization import RMSNorm
 
 __all__ = [
     "scaled_dot_product_attention",
     "MultiHeadAttention",
+    "RMSNorm",
 ]
