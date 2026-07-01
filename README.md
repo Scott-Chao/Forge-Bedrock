@@ -119,7 +119,7 @@ Build a Decoder-Only Transformer (GPT-family) on PyTorch. First-principles minim
     - [x] Sampling: $\text{argmax}$ → Temperature → Top-k → Top-p (nucleus)
     - [x] [Extension] KV Cache — $O(n^2) \to O(n)$ optimization
 - [ ] **Training Pipeline** — learning language from scratch
-    - [ ] Char-level corpus (TinyShakespeare / text8 / zhihu-snippets), no tokenizer, vocab_size ~70
+    - [x] Char-level corpus (TinyShakespeare / text8 / zhihu-snippets), no tokenizer, vocab_size ~70
     - [ ] Warmup + Cosine LR schedule (reuse Phase 4 understanding, now in PyTorch)
     - [ ] Perplexity monitoring + periodic sample outputs
 - [ ] **Analysis Notebooks** — understanding what you built

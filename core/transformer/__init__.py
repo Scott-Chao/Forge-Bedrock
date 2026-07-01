@@ -7,6 +7,7 @@ component from first principles using PyTorch.
 
 from core.transformer.attention import MultiHeadAttention, scaled_dot_product_attention
 from core.transformer.block import GPTBlock
+from core.transformer.data import CharLevelDataset, create_dataloaders
 from core.transformer.embedding import CharTokenizer, TokenEmbedding
 from core.transformer.feedforward import FeedForward
 from core.transformer.gpt import GPT
@@ -32,6 +33,8 @@ __all__ = [
     "TokenEmbedding",
     "GPT",
     "KVCache",
+    "CharLevelDataset",
+    "create_dataloaders",
     "sample",
     "sample_argmax",
     "sample_top_k",
