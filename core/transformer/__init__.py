@@ -16,6 +16,7 @@ from core.transformer.positional import (
     apply_rotary_emb,
     precompute_freqs_cis,
 )
+from core.transformer.sampling import sample, sample_argmax, sample_top_k, sample_top_p
 
 __all__ = [
     "scaled_dot_product_attention",
@@ -29,4 +30,8 @@ __all__ = [
     "CharTokenizer",
     "TokenEmbedding",
     "GPT",
+    "sample",
+    "sample_argmax",
+    "sample_top_k",
+    "sample_top_p",
 ]

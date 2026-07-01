@@ -15,9 +15,11 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
+from core.transformer.attention import _create_causal_mask
 from core.transformer.block import GPTBlock
 from core.transformer.embedding import TokenEmbedding
 from core.transformer.normalization import RMSNorm
+from core.transformer.sampling import sample
 
 
 class GPT(nn.Module):
@@ -127,6 +129,59 @@ class GPT(nn.Module):
                 nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             nn.init.normal_(module.weight, mean=0.0, std=0.02)
+
+    @torch.no_grad()
+    def generate(
+        self,
+        prompt: torch.LongTensor,
+        max_new_tokens: int = 100,
+        temperature: float = 1.0,
+        top_k: int | None = None,
+        top_p: float | None = None,
+        eos_token_id: int | None = None,
+    ) -> torch.LongTensor:
+        """Autoregressively generate tokens from a prompt.
+
+        Parameters
+        ----------
+        prompt : (batch, prompt_len) or (prompt_len,)
+            Initial token IDs to start generation from.
+        max_new_tokens : int, optional (default=100)
+            Maximum number of new tokens to generate.
+        temperature : float, optional (default=1.0)
+            Sampling temperature. 0 = argmax, 1 = scaled, higher = more random.
+        top_k : int | None, optional (default=None)
+            Top-k filtering threshold.
+        top_p : float | None, optional (default=None)
+            Nucleus (top-p) filtering threshold.
+        eos_token_id : int | None, optional (default=None)
+            If set, generation stops when this token is generated.
+
+        Returns
+        -------
+        output : (batch, prompt_len + num_generated)
+            Full sequence including prompt and generated tokens.
+        """
+        if prompt.dim() == 1:
+            prompt = prompt.unsqueeze(0)
+
+        output = prompt.clone()
+
+        full_mask = _create_causal_mask(self.max_seq_len, device=output.device)
+
+        for _ in range(max_new_tokens):
+            seq_len = output.size(1)
+            if seq_len >= self.max_seq_len:
+                break
+            mask = full_mask[:seq_len, :seq_len]
+            logits = self.forward(output, mask=mask)
+            next_logits = logits[:, -1, :]
+            next_token = sample(next_logits, temperature, top_k, top_p)
+            output = torch.cat([output, next_token.unsqueeze(-1)], dim=-1)
+            if eos_token_id is not None and (next_token == eos_token_id).any():
+                break
+
+        return output
 
     @property
     def num_parameters(self) -> int:
