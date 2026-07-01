@@ -10,6 +10,7 @@ from core.transformer.block import GPTBlock
 from core.transformer.embedding import CharTokenizer, TokenEmbedding
 from core.transformer.feedforward import FeedForward
 from core.transformer.gpt import GPT
+from core.transformer.kv_cache import KVCache
 from core.transformer.normalization import RMSNorm
 from core.transformer.positional import (
     RotaryEmbedding,
@@ -30,6 +31,7 @@ __all__ = [
     "CharTokenizer",
     "TokenEmbedding",
     "GPT",
+    "KVCache",
     "sample",
     "sample_argmax",
     "sample_top_k",

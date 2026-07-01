@@ -114,10 +114,10 @@ Build a Decoder-Only Transformer (GPT-family) on PyTorch. First-principles minim
 - [x] **GPT Architecture** — the language model skeleton
     - [x] Token Embedding: char → embedding lookup (vocab_size ~70 for char-level)
     - [x] `GPT`: $N$ stacked GPTBlocks + final RMSNorm + output projection
-- [ ] **Inference & Sampling** — making the model generate
+- [x] **Inference & Sampling** — making the model generate
     - [x] `generate()`: step-by-step autoregressive decoding
     - [x] Sampling: $\text{argmax}$ → Temperature → Top-k → Top-p (nucleus)
-    - [ ] [Extension] KV Cache — $O(n^2) \to O(n)$ optimization
+    - [x] [Extension] KV Cache — $O(n^2) \to O(n)$ optimization
 - [ ] **Training Pipeline** — learning language from scratch
     - [ ] Char-level corpus (TinyShakespeare / text8 / zhihu-snippets), no tokenizer, vocab_size ~70
     - [ ] Warmup + Cosine LR schedule (reuse Phase 4 understanding, now in PyTorch)

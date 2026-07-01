@@ -73,8 +73,12 @@ class GPTBlock(nn.Module):
         self,
         x: torch.Tensor,
         mask: torch.Tensor | None = None,
-    ) -> torch.Tensor:
+        past_kv: tuple[torch.Tensor, torch.Tensor] | None = None,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """Process one transformer block.
+
+        Always returns ``(output, (k, v))`` — the caller decides whether
+        to use (k, v) for cache storage or discard them with ``_``.
 
         Parameters
         ----------
@@ -82,20 +86,32 @@ class GPTBlock(nn.Module):
             Input tensor.
         mask : (seq_len, seq_len) | None, optional
             Causal attention mask. If None, a causal mask is created
-            automatically based on seq_len.
+            automatically based on seq_len (unless past_kv is set).
+        past_kv : tuple[torch.Tensor, torch.Tensor] | None, optional
+            Cached (key, value) from previous decode steps for this layer.
+            Passed directly to MultiHeadAttention.forward().
 
         Returns
         -------
-        out : (batch_size, seq_len, d_model)
-            Output tensor after self-attention + feedforward.
+        (out, (k, v)) : tuple
+            out : (batch_size, seq_len, d_model) — block output.
+            (k, v) : the key/value tensors in multi-head format,
+                     returned by MultiHeadAttention.
         """
         if mask is None:
-            seq_len = x.size(1)
-            mask = self._create_attn_mask(seq_len, device=x.device)
+            if past_kv is None:
+                # Normal forward (training / prefill): create a causal mask
+                seq_len = x.size(1)
+                mask = self._create_attn_mask(seq_len, device=x.device)
+            else:
+                # Decode step: no mask needed because Q is only the latest
+                # token (seq_len=1) and the cache only contains past +
+                # current positions, so causality is automatic.
+                pass
 
         residual = x
         x = self.norm_1(x)
-        x = self.attn(x, x, x, mask, rope=self.rope)
+        x, kv = self.attn(x, x, x, mask, self.rope, past_kv)
         x = residual + x
 
         residual = x
@@ -103,7 +119,7 @@ class GPTBlock(nn.Module):
         x = self.ff(x)
         x = residual + x
 
-        return x
+        return (x, kv)
 
     def _create_attn_mask(
         self, seq_len: int, device: torch.device | None = None

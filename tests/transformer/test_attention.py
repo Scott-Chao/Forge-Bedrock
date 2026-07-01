@@ -145,7 +145,7 @@ class TestMultiHeadAttention:
         batch, seq_len, d_model, n_heads = 2, 8, 64, 8
         mha = MultiHeadAttention(d_model, n_heads)
         x = torch.randn(batch, seq_len, d_model)
-        out = mha(x, x, x)
+        out, _ = mha(x, x, x)
         assert out.shape == (batch, seq_len, d_model), f"shape mismatch: {out.shape}"
 
     def test_n_heads_must_divide_d_model(self):
@@ -158,7 +158,7 @@ class TestMultiHeadAttention:
         batch, seq_len, d_model, n_heads = 1, 4, 16, 4
         mha = MultiHeadAttention(d_model, n_heads)
         x = torch.randn(batch, seq_len, d_model)
-        out = mha(x, x, x)
+        out, _ = mha(x, x, x)
         # Output should NOT be identical to input (projections change things)
         assert not torch.allclose(out, x, atol=1e-4), (
             "MHA should transform the input, not pass it through"
@@ -171,7 +171,7 @@ class TestMultiHeadAttention:
         q = torch.randn(batch, q_len, d_model)
         k = torch.randn(batch, kv_len, d_model)
         v = torch.randn(batch, kv_len, d_model)
-        out = mha(q, k, v)
+        out = mha(q, k, v)[0]
         # Output length should match query length (not key/value length)
         assert out.shape == (batch, q_len, d_model), (
             f"cross-attention shape mismatch: {out.shape}"
@@ -184,13 +184,12 @@ class TestMultiHeadAttention:
         x = torch.randn(batch, seq_len, d_model)
         mask = _create_causal_mask(seq_len)
 
-        out_allowed = mha(x, x, x, mask=mask)
+        out_allowed, _ = mha(x, x, x, mask=mask)
 
         # Zero out the last token's value — it should only affect the last position
         x_zeroed = x.clone()
         x_zeroed[:, -1, :] = 0.0
-        out_zeroed = mha(x_zeroed, x_zeroed, x_zeroed, mask=mask)
-
+        out_zeroed = mha(x_zeroed, x_zeroed, x_zeroed, mask=mask)[0]
         # Position 0 should be unaffected
         assert torch.allclose(out_allowed[:, 0, :], out_zeroed[:, 0, :], atol=1e-6), (
             "position 0 must not depend on position 5 under causal mask"
@@ -202,12 +201,12 @@ class TestMultiHeadAttention:
         mha = MultiHeadAttention(d_model, n_heads)
         x = torch.randn(batch, seq_len, d_model)
 
-        out_normal = mha(x, x, x)
+        out_normal, _ = mha(x, x, x)
 
         # Zero out last position
         x_zeroed = x.clone()
         x_zeroed[:, -1, :] = 0.0
-        out_zeroed = mha(x_zeroed, x_zeroed, x_zeroed)
+        out_zeroed, _ = mha(x_zeroed, x_zeroed, x_zeroed)
 
         # Without mask, position 0 SHOULD be affected (it attends to all positions)
         # Note: difference may be small at init but should be nonzero
@@ -226,7 +225,7 @@ class TestMultiHeadAttention:
         batch, seq_len, d_model, n_heads = 1, 2, 8, 4
         mha = MultiHeadAttention(d_model, n_heads)
         x = torch.randn(batch, seq_len, d_model)
-        out = mha(x, x, x)
+        out, _ = mha(x, x, x)
         # Should have non-trivial output (not all zeros)
         assert out.abs().sum().item() > 0, "output should not be all zeros"
         # Output should not be just a single repeated pattern across the d_model dim

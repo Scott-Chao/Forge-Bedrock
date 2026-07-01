@@ -124,8 +124,12 @@ class MultiHeadAttention(torch.nn.Module):
         value: torch.Tensor,
         mask: torch.Tensor | None = None,
         rope: RotaryEmbedding | None = None,
-    ) -> torch.Tensor:
-        """Forward pass for multi-head attention.
+        past_kv: tuple[torch.Tensor, torch.Tensor] | None = None,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+        """Forward pass for multi-head attention, with optional KV cache.
+
+        Always returns ``(output, (k_new, v_new))`` — the caller decides
+        whether to use the new K, V (for cache storage) or discard them.
 
         Parameters
         ----------
@@ -136,10 +140,22 @@ class MultiHeadAttention(torch.nn.Module):
         rope  : RotaryEmbedding | None, optional
             If provided, applies rotary position encoding to Q and K
             after reshaping into multi-head form.
+        past_kv : tuple[torch.Tensor, torch.Tensor] | None, optional
+            Cached (key, value) from previous decode steps, each shaped
+            (batch, n_heads, cached_len, d_k). When provided, the input
+            ``key`` / ``value`` contain ONLY the new token(s); they are
+            concatenated with the cached tensors along dim=-2 *before*
+            the attention computation.
 
         Returns
         -------
-        output : (batch_size, seq_len, d_model)
+        (output, (k_new, v_new)) : tuple
+            output  : (batch_size, seq_len_q, d_model) — attention result.
+            k_new   : (batch, n_heads, seq_len_new, d_k) — new key projection
+                      (after RoPE if applicable), *without* cached content.
+            v_new   : (batch, n_heads, seq_len_new, d_k) — new value projection.
+            The caller (KVCache) is responsible for appending (k_new, v_new)
+            to the cache — this avoids double-concatenation bugs.
         """
         batch = query.size(0)
         q = self.w_q(query)
@@ -155,6 +171,13 @@ class MultiHeadAttention(torch.nn.Module):
             q = rope(q)
             k = rope(k)
 
+        # ── KV Cache: keep new K, V reference before concatenation ──
+        k_new, v_new = k, v
+
+        if past_kv is not None:
+            k = torch.cat([past_kv[0], k_new], dim=-2)
+            v = torch.cat([past_kv[1], v_new], dim=-2)
+
         out = scaled_dot_product_attention(q, k, v, mask)
 
         if self.dropout is not None:
@@ -164,4 +187,4 @@ class MultiHeadAttention(torch.nn.Module):
 
         out = self.w_o(out)
 
-        return out
+        return (out, (k_new, v_new))

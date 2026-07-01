@@ -18,6 +18,7 @@ import torch.nn as nn
 from core.transformer.attention import _create_causal_mask
 from core.transformer.block import GPTBlock
 from core.transformer.embedding import TokenEmbedding
+from core.transformer.kv_cache import KVCache
 from core.transformer.normalization import RMSNorm
 from core.transformer.sampling import sample
 
@@ -89,6 +90,7 @@ class GPT(nn.Module):
         self,
         tokens: torch.LongTensor,
         mask: torch.Tensor | None = None,
+        kv_cache: KVCache | None = None,
     ) -> torch.Tensor:
         """Forward pass through the full GPT model.
 
@@ -99,16 +101,37 @@ class GPT(nn.Module):
         mask : (seq_len, seq_len) | None, optional
             Causal attention mask. If None, each GPTBlock will create
             its own causal mask based on seq_len.
+        kv_cache : KVCache | None, optional
+            The KV cache instance (for autoregressive decoding).
+
+            * ``kv_cache is None`` — normal forward pass (training mode).
+              All K, V computed and discarded.
+
+            * ``kv_cache is not None`` — caching mode.
+              Each layer retrieves ``past_kv`` from the cache, computes
+              new K, V, and stores the updated (K, V) back.
+
+              During prefill (first call): ``past_kv`` is ``None`` for every
+              layer since nothing is cached yet; full K, V are computed and
+              stored.
+
+              During decode (subsequent calls with one token): ``past_kv``
+              contains previously cached K, V; only the new token's K, V
+              are computed, concatenated with the cache, and re-stored.
 
         Returns
         -------
         logits : (batch_size, seq_len, vocab_size)
             Unnormalised scores for each token at each position.
-            Shape: (batch, seq, vocab_size).
         """
         x = self.token_embedding(tokens)
-        for block in self.blocks:
-            x = block(x, mask=mask)
+        for i, block in enumerate(self.blocks):
+            if kv_cache is not None:
+                past_kv = kv_cache.get(i)  # None during prefill
+                x, (k_out, v_out) = block(x, mask=mask, past_kv=past_kv)
+                kv_cache.update(i, k_out, v_out)
+            else:
+                x, _ = block(x, mask=mask)
         x = self.final_norm(x)
         logits = self.lm_head(x)
         return logits
@@ -139,8 +162,19 @@ class GPT(nn.Module):
         top_k: int | None = None,
         top_p: float | None = None,
         eos_token_id: int | None = None,
+        use_kv_cache: bool = True,
     ) -> torch.LongTensor:
         """Autoregressively generate tokens from a prompt.
+
+        Two modes — same loop structure, different forward strategy:
+
+        **KV Cache mode** (``use_kv_cache=True``, default):
+            Prefills the cache with the full prompt, then feeds one token
+            at a time. Each decode step is O(n) instead of O(n²).
+
+        **Naive mode** (``use_kv_cache=False``):
+            Re-runs the full sequence through the model at every step.
+            Useful as a correctness baseline.
 
         Parameters
         ----------
@@ -156,6 +190,9 @@ class GPT(nn.Module):
             Nucleus (top-p) filtering threshold.
         eos_token_id : int | None, optional (default=None)
             If set, generation stops when this token is generated.
+        use_kv_cache : bool, optional (default=True)
+            If True, uses KV cache for efficient decoding.
+            Falls back to full-sequence re-forward if False.
 
         Returns
         -------
@@ -165,21 +202,37 @@ class GPT(nn.Module):
         if prompt.dim() == 1:
             prompt = prompt.unsqueeze(0)
 
+        cache = KVCache() if use_kv_cache else None
+
         output = prompt.clone()
 
         full_mask = _create_causal_mask(self.max_seq_len, device=output.device)
 
+        logits = self.forward(
+            output,
+            mask=full_mask[: output.size(1), : output.size(1)],
+            kv_cache=cache,
+        )
+
         for _ in range(max_new_tokens):
-            seq_len = output.size(1)
-            if seq_len >= self.max_seq_len:
-                break
-            mask = full_mask[:seq_len, :seq_len]
-            logits = self.forward(output, mask=mask)
             next_logits = logits[:, -1, :]
             next_token = sample(next_logits, temperature, top_k, top_p)
             output = torch.cat([output, next_token.unsqueeze(-1)], dim=-1)
+
             if eos_token_id is not None and (next_token == eos_token_id).any():
                 break
+            if output.size(1) >= self.max_seq_len:
+                break
+
+            if use_kv_cache:
+                logits = self.forward(output[:, -1:], kv_cache=cache)
+            else:
+                seq_len = output.size(1)
+                mask = full_mask[:seq_len, :seq_len]
+                logits = self.forward(output, mask=mask)
+
+        if cache is not None:
+            cache.reset()
 
         return output
 
