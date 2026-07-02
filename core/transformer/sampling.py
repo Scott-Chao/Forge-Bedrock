@@ -22,8 +22,16 @@ def sample(
     temperature: float = 1.0,
     top_k: int | None = None,
     top_p: float | None = None,
+    repetition_penalty: float = 1.0,
+    past_tokens: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Sample a single token ID from logits with optional filtering.
+
+    The pipeline is:
+
+        logits → [repetition penalty] → [temperature scaling]
+               → [top-k filter] → [top-p filter]
+               → [softmax → multinomial] → next_token_id
 
     Parameters
     ----------
@@ -38,12 +46,33 @@ def sample(
     top_p : float | None, optional (default=None)
         If set, only the smallest set of tokens whose cumulative
         probability exceeds top_p are kept (nucleus sampling).
+    repetition_penalty : float, optional (default=1.0)
+        Penalty factor for already-generated tokens (from CTRL paper).
+        Applied BEFORE temperature scaling.
+        - 1.0 = disabled (no penalty)
+        - > 1.0 = penalise repeated tokens (typical: 1.05 - 1.5)
+        - < 1.0 = encourage repetition (not typically used)
+    past_tokens : (batch, seq_len) or (seq_len,) | None, optional
+        Token IDs that have already been generated. Tokens present in
+        this sequence have their logits divided by ``repetition_penalty``.
 
     Returns
     -------
     token_id : (,) or (batch,)
         Sampled token ID(s).
     """
+    # ── Repetition penalty: divide logits of seen tokens ────────────────
+    if repetition_penalty != 1.0 and past_tokens is not None:
+        if logits.dim() == 1:
+            # Single sequence: (vocab_size,)
+            unique_tok = torch.unique(past_tokens)
+            logits[unique_tok] /= repetition_penalty
+        else:
+            # Batched: (batch, vocab_size)
+            for b in range(logits.size(0)):
+                unique_tok = torch.unique(past_tokens[b])
+                logits[b, unique_tok] /= repetition_penalty
+
     if temperature == 0:
         return torch.argmax(logits, dim=-1)
 

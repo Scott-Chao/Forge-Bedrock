@@ -161,6 +161,7 @@ class GPT(nn.Module):
         temperature: float = 1.0,
         top_k: int | None = None,
         top_p: float | None = None,
+        repetition_penalty: float = 1.1,
         eos_token_id: int | None = None,
         use_kv_cache: bool = True,
     ) -> torch.LongTensor:
@@ -188,6 +189,11 @@ class GPT(nn.Module):
             Top-k filtering threshold.
         top_p : float | None, optional (default=None)
             Nucleus (top-p) filtering threshold.
+        repetition_penalty : float, optional (default=1.1)
+            Penalty factor for already-generated tokens (CTRL paper style).
+            1.0 = disabled. Typical range: 1.05 - 1.5.
+            Higher values = stronger discouragement of repetition.
+            Default 1.1 was empirically found optimal for this model size.
         eos_token_id : int | None, optional (default=None)
             If set, generation stops when this token is generated.
         use_kv_cache : bool, optional (default=True)
@@ -216,7 +222,14 @@ class GPT(nn.Module):
 
         for _ in range(max_new_tokens):
             next_logits = logits[:, -1, :]
-            next_token = sample(next_logits, temperature, top_k, top_p)
+            next_token = sample(
+                next_logits,
+                temperature,
+                top_k,
+                top_p,
+                repetition_penalty=repetition_penalty,
+                past_tokens=output,
+            )
             output = torch.cat([output, next_token.unsqueeze(-1)], dim=-1)
 
             if eos_token_id is not None and (next_token == eos_token_id).any():

@@ -118,6 +118,7 @@ Build a Decoder-Only Transformer (GPT-family) on PyTorch. First-principles minim
     - [x] `generate()`: step-by-step autoregressive decoding
     - [x] Sampling: $\text{argmax}$ → Temperature → Top-k → Top-p (nucleus)
     - [x] [Extension] KV Cache — $O(n^2) \to O(n)$ optimization
+    - [x] [Extension] Repetition Penalty — discourage token loops via logit penalisation
 - [x] **Training Pipeline** — learning language from scratch
     - [x] Char-level corpus (TinyShakespeare / text8 / zhihu-snippets), no tokenizer, vocab_size ~70
     - [x] Training loop + loss function (cross-entropy with label shift)
