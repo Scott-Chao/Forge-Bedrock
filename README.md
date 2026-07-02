@@ -123,7 +123,7 @@ Build a Decoder-Only Transformer (GPT-family) on PyTorch. First-principles minim
     - [x] Training loop + loss function (cross-entropy with label shift)
     - [x] Evaluation: perplexity monitoring + periodic sampling
 - [ ] **Analysis Notebooks** — understanding what you built
-    - [ ] Attention pattern + RoPE heatmap visualization
+    - [x] Attention pattern + RoPE heatmap visualization
     - [ ] Temperature / Top-k / Top-p sampling comparison
     - [ ] In-Context Learning demo & completion examples
 
