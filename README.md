@@ -122,10 +122,9 @@ Build a Decoder-Only Transformer (GPT-family) on PyTorch. First-principles minim
     - [x] Char-level corpus (TinyShakespeare / text8 / zhihu-snippets), no tokenizer, vocab_size ~70
     - [x] Training loop + loss function (cross-entropy with label shift)
     - [x] Evaluation: perplexity monitoring + periodic sampling
-- [ ] **Analysis Notebooks** — understanding what you built
+- [x] **Analysis Notebooks** — understanding what you built
     - [x] Attention pattern + RoPE heatmap visualization
-    - [ ] Temperature / Top-k / Top-p sampling comparison
-    - [ ] In-Context Learning demo & completion examples
+    - [x] Temperature / Top-k / Top-p sampling comparison
 
 ---
 
