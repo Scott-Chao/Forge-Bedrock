@@ -30,21 +30,39 @@ forge-bedrock/
 │   ├── distributions.py   # Theoretical distributions (Uniform, Bernoulli, Categorical, Normal)
 │   ├── info_theory.py     # Entropy, KL Divergence, Cross-Entropy
 │   └── bias_variance.py   # Bias-variance decomposition simulation
+├── core/transformer/      # Decoder-only Transformer (GPT) on PyTorch (Phase 5)
+│   ├── attention.py       # Scaled Dot-Product Attention, MultiHeadAttention + KV cache
+│   ├── block.py           # GPTBlock: RMSNorm → Attn → RMSNorm → FFN (Pre-Norm residual)
+│   ├── data.py            # Char-level corpus loading + CharLevelDataset + DataLoader builder
+│   ├── embedding.py       # CharTokenizer (vocab ~70) + TokenEmbedding lookup
+│   ├── feedforward.py     # ReLU FeedForward: d_model → d_ff → d_model, d_ff = 4×d_model
+│   ├── gpt.py             # GPT: TokenEmbed → N×GPTBlock → RMSNorm → lm_head → logits
+│   ├── kv_cache.py        # O(n²) → O(n) decode: KVCache + KVCacheManager
+│   ├── normalization.py   # RMSNorm: γ ⊙ x / √(mean(x²) + ε)
+│   ├── positional.py      # RoPE: precompute_freqs_cis, apply_rotary_emb, RotaryEmbedding
+│   └── sampling.py        # Token sampling: argmax → Temperature → Top-k → Top-p (nucleus)
 ├── apps/                  # Application Jupyter Notebooks
-│   ├── image_compression.ipynb
-│   ├── least_squares_regression.ipynb
-│   ├── mlp_regression.ipynb
-│   ├── binary_classification_moons.ipynb
-│   ├── multiclass_classification_blobs.ipynb
-│   ├── compare_losses_regression.ipynb
-│   ├── bias_variance_tradeoff.ipynb
-│   ├── pdf_pmf_visualization.ipynb
-│   ├── toy_loss_surface_comparison.ipynb     # Phase 4: Beale & Rosenbrock optimiser trajectories
-│   └── optimiser_comparison_classifier.ipynb  # Phase 4: SGD vs Momentum vs Adam on moons
-├── tests/linalg/          # pytest tests for linear algebra
-├── tests/autograd/        # pytest tests for autograd
-├── tests/nn/              # pytest tests for neural network modules
-├── tests/prob/            # pytest tests for probability & statistics
+│   ├── image_compression.ipynb        # SVD-based low-rank image compression
+│   ├── least_squares_regression.ipynb # Normal Equation vs Pseudoinverse
+│   ├── mlp_regression.ipynb           # 2-layer MLP fitting sin(x) from scratch
+│   ├── binary_classification_moons.ipynb    # Moons dataset with BCE loss
+│   ├── multiclass_classification_blobs.ipynb # Synthetic blobs + CrossEntropy
+│   ├── compare_losses_regression.ipynb      # MSE vs L1 vs Huber on outliers
+│   ├── bias_variance_tradeoff.ipynb         # Bias-variance decomposition demo
+│   ├── pdf_pmf_visualization.ipynb          # Distribution visualisation
+│   ├── toy_loss_surface_comparison.ipynb     # Beale & Rosenbrock with 7 optimisers
+│   ├── optimiser_comparison_classifier.ipynb # SGD vs Momentum vs Adam on moons
+│   ├── train_gpt.ipynb                 # Full training pipeline on TinyShakespeare
+│   ├── analysis_attention_rope.ipynb   # Attention pattern heatmaps + RoPE visualisation
+│   └── analysis_sampling.ipynb         # Temperature, Top-k, Top-p comparison
+│
+├── tests/                 # pytest tests mirroring core/ structure
+│   ├── linalg/            # Tests for Phase 1 (matrix, eigen, solver, SVD)
+│   ├── autograd/          # Tests for Phase 2 (value, functional with finite differences)
+│   ├── nn/                # Tests for Phase 2–4 (all layers, losses, optimisers, schedulers)
+│   ├── prob/              # Tests for Phase 3 (distributions, info theory)
+│   └── transformer/       # Tests for Phase 5 (attention, block, GPT, sampling, generation)
+│
 ├── assets/                # Static resources (images, etc.)
 └── environment.yml        # conda environment
 ```
