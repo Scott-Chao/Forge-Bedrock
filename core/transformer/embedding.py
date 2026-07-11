@@ -130,9 +130,14 @@ class BPETokenizer:
     special_tokens : list[str] | None, optional
         Special tokens like ``["<PAD>", "<UNK>", "<BOS>", "<EOS>"]``.
         These occupy the first N IDs in the vocabulary.
-    regex_pattern : str, optional (default=r'\\w+')
+    regex_pattern : str, optional (default=r'\\w+|\\s+')
         Regex pattern for pre-tokenization (splitting text into "words").
-        The default ``r'\\w+'`` matches contiguous word characters.
+        The default pattern ``r'\\w+|\\s+'`` matches word characters and
+        whitespace as separate tokens, keeping spacing information in the
+        vocabulary so that ``decode(encode(text))`` recovers original
+        whitespace.
+        Non-word, non-space characters (punctuation, apostrophes, etc.)
+        are discarded.
 
     Attributes
     ----------
@@ -150,7 +155,7 @@ class BPETokenizer:
         self,
         vocab_size: int = 256,
         special_tokens: list[str] | None = None,
-        regex_pattern: str = r"\w+",
+        regex_pattern: str = r"\w+|\s+|[^\w\s]",
     ):
         if special_tokens is None:
             special_tokens = ["<PAD>", "<UNK>", "<BOS>", "<EOS>"]
@@ -168,9 +173,10 @@ class BPETokenizer:
     def _pre_tokenize(self, text: str) -> list[str]:
         """Split raw text into pre-token "words".
 
-        The default regex ``r'\\w+'`` matches one or more word characters
-        (letters, digits, underscore). Everything else (spaces, punctuation,
-        newlines) acts as a delimiter and is discarded.
+        The default regex ``r'\\w+|\\s+|[^\\w\\s]'`` matches word characters,
+        whitespace, and individual punctuation symbols as separate pre-tokens.
+        Whitespace and punctuation are preserved so that
+        ``decode(encode(text))`` can recover original formatting.
 
         Parameters
         ----------
@@ -187,13 +193,14 @@ class BPETokenizer:
     def _get_char_vocab(self, words: list[list[str]]) -> dict[str, int]:
         """Build initial character-level vocabulary from pre-tokenized words.
 
-        Each word is split into individual characters. Each character
-        gets a unique token ID starting after the special tokens.
+        Each word (already split into characters) supplies its individual
+        characters. Each unique character gets a unique token ID starting
+        after the special tokens.
 
         Parameters
         ----------
-        words : list[str]
-            Pre-tokenized words from ``_pre_tokenize``.
+        words : list[list[str]]
+            Each element is a word represented as a list of characters.
 
         Returns
         -------
@@ -284,12 +291,11 @@ class BPETokenizer:
 
         while len(self.vocab) < self.vocab_size:
             pair_freqs = self._get_pair_freqs(words)
+            if not pair_freqs:
+                break
 
-            best_pair, best_freq = None, 0
-            for pair, freq in pair_freqs.items():
-                if freq > best_freq:
-                    best_pair, best_freq = pair, freq
-            if best_freq < 2:
+            best_pair = max(pair_freqs, key=lambda p: pair_freqs[p])
+            if pair_freqs[best_pair] < 2:
                 break
 
             merged = best_pair[0] + best_pair[1]
@@ -301,13 +307,46 @@ class BPETokenizer:
             self.vocab[merged] = next_id
             self.id_to_token[next_id] = merged
 
+    def _encode_word(self, word: str) -> list[str]:
+        """Encode a single pre-tokenized word using learned BPE merges.
+
+        1. Split the word into individual characters
+        2. Repeatedly find the adjacent pair with the lowest merge rank
+        3. Merge that pair
+        4. Repeat until no more merges are possible
+
+        Parameters
+        ----------
+        word : str
+            A single pre-tokenized word (e.g., ``"low"``).
+
+        Returns
+        -------
+        symbols : list[str]
+            List of subword tokens (e.g., ``["low"]``).
+        """
+        symbols = list(word)
+        while len(symbols) > 1:
+            candidates = [
+                (a, b)
+                for a, b in zip(symbols, symbols[1:])
+                if (a, b) in self.merge_ranks
+            ]
+            if not candidates:
+                break
+            best_pair = min(candidates, key=lambda p: self.merge_ranks[p])
+
+            symbols = self._merge_pair([symbols], best_pair, self.merges[best_pair])[0]
+
+        return symbols
+
     def encode(self, text: str) -> list[int]:
         """Convert a text string to a list of token IDs.
 
         Pipeline:
             1. Pre-tokenize the text into words
-            2. For each word, iteratively apply learned merges by rank
-            3. Convert final symbols to token IDs
+            2. For each word, apply learned merges via ``_encode_word``
+            3. Convert subword tokens to token IDs via ``self.vocab``
 
         Parameters
         ----------
@@ -319,12 +358,13 @@ class BPETokenizer:
         ids : list[int]
             Sequence of integer token IDs.
         """
-        # TODO (Phase 6-3): Implement BPE encoding.
-        #   - Call _pre_tokenize(text)
-        #   - For each word, apply merges in order of merge_ranks
-        #   - Convert symbols to IDs using self.vocab
-        #   - Unknown symbols -> special UNK token
-        pass
+        words = self._pre_tokenize(text)
+        unk_id = self.vocab.get("<UNK>")
+        ids = []
+        for word in words:
+            for token in self._encode_word(word):
+                ids.append(self.vocab.get(token, unk_id))
+        return ids
 
     def decode(self, ids: list[int], skip_special_tokens: bool = True) -> str:
         """Convert a list of token IDs back to text.
@@ -341,12 +381,10 @@ class BPETokenizer:
         text : str
             Decoded text string.
         """
-        # TODO (Phase 6-3): Implement BPE decoding.
-        #   - Look up each ID in self.id_to_token
-        #   - Special tokens are filtered if skip_special_tokens=True
-        #   - Concatenate tokens into a string
-        #   - Add spaces between words (or reconstruct original spacing)
-        pass
+        tokens = [self.id_to_token[id] for id in ids]
+        if skip_special_tokens:
+            tokens = [t for t in tokens if t not in self.special_tokens]
+        return "".join(tokens)
 
     def __len__(self) -> int:
         """Number of tokens in the vocabulary."""

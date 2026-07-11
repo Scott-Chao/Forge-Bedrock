@@ -238,15 +238,16 @@ class TestBPETokenizer:
     @pytest.mark.parametrize(
         "text, expected",
         [
-            ("Hello, world!", ["Hello", "world"]),
-            ("Let's go", ["Let", "s", "go"]),
+            ("Hello, world!", ["Hello", ",", " ", "world", "!"]),
+            ("Let's go", ["Let", "'", "s", " ", "go"]),
             ("", []),
-            ("!@#$ %%%", []),
+            ("!@#$ %%%", ["!", "@", "#", "$", " ", "%", "%", "%"]),
             ("abc123_def", ["abc123_def"]),  # \w includes underscore
+            (" no spaces ", [" ", "no", " ", "spaces", " "]),
         ],
     )
     def test_pre_tokenize(self, text, expected):
-        """_pre_tokenize should split text into words by \\w+."""
+        """_pre_tokenize should split text by \\w+, \\s+, and individual [^\\w\\s]."""
         tok = BPETokenizer()
         assert tok._pre_tokenize(text) == expected
 
@@ -355,3 +356,116 @@ class TestBPETokenizer:
         tok2.train(["hello world foo bar baz"])
         assert tok1.merges == tok2.merges
         assert tok1.vocab == tok2.vocab
+
+    # ------------------------------------------------------------------
+    # _encode_word
+    # ------------------------------------------------------------------
+
+    @pytest.fixture
+    def trained_tok(self):
+        """A small BPETokenizer trained on repetitive text so ('l','o')→'lo'→'low'."""
+        tok = BPETokenizer(vocab_size=15)
+        tok.train(["low low low low new new new new low low"])
+        return tok
+
+    def test_encode_word_merged(self, trained_tok):
+        """``low`` should be encoded as a single subword after training."""
+        tokens = trained_tok._encode_word("low")
+        assert tokens == ["low"]
+
+    def test_encode_word_unmerged(self, trained_tok):
+        """``new`` should stay as separate chars if ('n','e') was too rare."""
+        tokens = trained_tok._encode_word("new")
+        # Either merged to ["new"] or stayed as chars — either is valid
+        assert isinstance(tokens, list)
+        assert all(isinstance(t, str) for t in tokens)
+        assert "".join(tokens) == "new"
+
+    def test_encode_word_no_merges(self):
+        """Without training, encode_word should return the word's characters."""
+        tok = BPETokenizer()
+        assert tok._encode_word("hi") == ["h", "i"]
+
+    def test_encode_word_empty(self, trained_tok):
+        """Empty word should produce empty list."""
+        assert trained_tok._encode_word("") == []
+
+    # ------------------------------------------------------------------
+    # encode
+    # ------------------------------------------------------------------
+
+    def test_encode_returns_ids(self, trained_tok):
+        """encode should return a list of token IDs."""
+        ids = trained_tok.encode("low new")
+        assert isinstance(ids, list)
+        assert len(ids) > 0
+        assert all(isinstance(i, int) for i in ids)
+
+    def test_encode_known_word_maps_to_same_id(self, trained_tok):
+        """Same word should always encode to the same ID sequence."""
+        ids1 = trained_tok.encode("low")
+        ids2 = trained_tok.encode("low")
+        assert ids1 == ids2
+
+    def test_encode_empty_string(self, trained_tok):
+        """Empty string should return empty list."""
+        assert trained_tok.encode("") == []
+
+    def test_encode_unknown_token_uses_unk(self, trained_tok):
+        """Characters not in vocab should become <UNK>."""
+        unk_id = trained_tok.vocab["<UNK>"]
+        # Use a character unlikely to be in our tiny vocab
+        ids = trained_tok.encode("lowxyz_unknown")
+        assert unk_id in ids
+
+    # ------------------------------------------------------------------
+    # decode
+    # ------------------------------------------------------------------
+
+    def test_decode_basic(self, trained_tok):
+        """decode should convert IDs back to the correct token string."""
+        # "low" should be a merged token
+        ids = trained_tok.encode("low")
+        decoded = trained_tok.decode(ids)
+        assert decoded == "low"
+
+    def test_decode_skips_special_by_default(self, trained_tok):
+        """Special tokens should be excluded by default."""
+        bos_id = trained_tok.vocab["<BOS>"]
+        eos_id = trained_tok.vocab["<EOS>"]
+        decoded = trained_tok.decode([bos_id, eos_id])
+        assert decoded == "", "special tokens should be skipped"
+
+    def test_decode_includes_special_when_requested(self, trained_tok):
+        """skip_special_tokens=False should keep special tokens."""
+        unk_id = trained_tok.vocab["<UNK>"]
+        decoded = trained_tok.decode([unk_id], skip_special_tokens=False)
+        assert "<UNK>" in decoded
+
+    def test_decode_empty_list(self, trained_tok):
+        """Empty ID list should produce empty string."""
+        assert trained_tok.decode([]) == ""
+
+    # ------------------------------------------------------------------
+    # Roundtrip
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "low",
+            "new",
+            "low new",
+            "well",
+            "low low well",
+        ],
+    )
+    def test_encode_decode_roundtrip_known_words(self, trained_tok, text):
+        """encode → decode should reproduce concatenated subwords."""
+        ids = trained_tok.encode(text)
+        decoded = trained_tok.decode(ids)
+        # The training vocab only contains {e,l,n,o,w,space} and learned merges,
+        # so these test strings should roundtrip losslessly.
+        words = trained_tok._pre_tokenize(text)
+        expected = "".join(words)
+        assert decoded == expected
