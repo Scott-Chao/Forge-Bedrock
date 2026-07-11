@@ -1,14 +1,18 @@
 """
-core/transformer/embedding.py — Token embedding and character-level tokenizer.
+core/transformer/embedding.py — Token embedding and tokenizers.
 
-For this project, we use a character-level tokenizer (no BPE/WordPiece)
-with a vocabulary size of ~70 characters. This keeps the model simple
-and lets us focus on understanding the Transformer internals.
+Tokenizers convert text to/from integer token IDs:
+    - CharTokenizer: character-level (Phase 5 baseline)
+    - BPETokenizer: subword-level via Byte Pair Encoding (Phase 6)
 
-    text → [CharTokenizer] → token_ids → [TokenEmbedding] → vectors
+The TokenEmbedding layer maps token IDs to dense vectors.
+
+    text → [CharTokenizer|BPETokenizer] → token_ids → [TokenEmbedding] → vectors
 """
 
 from __future__ import annotations
+
+import re
 
 import torch
 import torch.nn as nn
@@ -110,6 +114,249 @@ class CharTokenizer:
 
     def __repr__(self) -> str:
         return f"CharTokenizer(vocab_size={self.vocab_size})"
+
+
+class BPETokenizer:
+    """Byte Pair Encoding tokenizer.
+
+    Learns a subword vocabulary by iteratively merging the most frequent
+    adjacent character pairs within pre-tokenized words.
+
+    Parameters
+    ----------
+    vocab_size : int, optional (default=256)
+        Target vocabulary size including base characters and special tokens.
+        Must be > len(base_characters) + len(special_tokens).
+    special_tokens : list[str] | None, optional
+        Special tokens like ``["<PAD>", "<UNK>", "<BOS>", "<EOS>"]``.
+        These occupy the first N IDs in the vocabulary.
+    regex_pattern : str, optional (default=r'\\w+')
+        Regex pattern for pre-tokenization (splitting text into "words").
+        The default ``r'\\w+'`` matches contiguous word characters.
+
+    Attributes
+    ----------
+    vocab : dict[str, int]
+        Token-to-ID mapping (populated after training).
+    id_to_token : dict[int, str]
+        ID-to-token mapping (inverse of vocab).
+    merges : dict[tuple[str, str], str]
+        Learned merge rules: ``(left, right) -> merged_token``.
+    merge_ranks : dict[tuple[str, str], int]
+        Merge priority: ``(left, right) -> rank`` (lower = learned earlier).
+    """
+
+    def __init__(
+        self,
+        vocab_size: int = 256,
+        special_tokens: list[str] | None = None,
+        regex_pattern: str = r"\w+",
+    ):
+        if special_tokens is None:
+            special_tokens = ["<PAD>", "<UNK>", "<BOS>", "<EOS>"]
+
+        self.vocab_size = vocab_size
+        self.special_tokens = special_tokens
+        self.regex_pattern = regex_pattern
+
+        # Populated during training
+        self.vocab: dict[str, int] = {}
+        self.id_to_token: dict[int, str] = {}
+        self.merges: dict[tuple[str, str], str] = {}
+        self.merge_ranks: dict[tuple[str, str], int] = {}
+
+    def _pre_tokenize(self, text: str) -> list[str]:
+        """Split raw text into pre-token "words".
+
+        The default regex ``r'\\w+'`` matches one or more word characters
+        (letters, digits, underscore). Everything else (spaces, punctuation,
+        newlines) acts as a delimiter and is discarded.
+
+        Parameters
+        ----------
+        text : str
+            Raw input text (e.g., ``"Hello, world!"``).
+
+        Returns
+        -------
+        words : list[str]
+            List of pre-tokenized words (e.g., ``["Hello", "world"]``).
+        """
+        return re.findall(self.regex_pattern, text)
+
+    def _get_char_vocab(self, words: list[list[str]]) -> dict[str, int]:
+        """Build initial character-level vocabulary from pre-tokenized words.
+
+        Each word is split into individual characters. Each character
+        gets a unique token ID starting after the special tokens.
+
+        Parameters
+        ----------
+        words : list[str]
+            Pre-tokenized words from ``_pre_tokenize``.
+
+        Returns
+        -------
+        char_vocab : dict[str, int]
+            Character-to-ID mapping.
+        """
+        chars = {c for word in words for c in word}
+        start_id = len(self.special_tokens)
+        char_vocab = {c: i for i, c in enumerate(sorted(chars), start=start_id)}
+        return char_vocab
+
+    def _get_pair_freqs(self, words: list[list[str]]) -> dict[tuple[str, str], int]:
+        """Count frequency of adjacent character pairs across all words.
+
+        For each word represented as a list of symbols (initially characters,
+        later also merged subwords), count how often each adjacent pair
+        ``(symbol[i], symbol[i+1])`` appears.
+
+        Parameters
+        ----------
+        words : list[list[str]]
+            Each word is a list of symbol strings (characters or subwords).
+
+        Returns
+        -------
+        pair_freqs : dict[tuple[str, str], int]
+            Pair-to-frequency mapping.
+        """
+        pair_freqs = {}
+        for word in words:
+            for a, b in zip(word, word[1:]):
+                key = (a, b)
+                pair_freqs[key] = pair_freqs.get(key, 0) + 1
+        return pair_freqs
+
+    def _merge_pair(
+        self, words: list[list[str]], pair: tuple[str, str], replacement: str
+    ) -> list[list[str]]:
+        """Replace all occurrences of ``pair`` with ``replacement`` in every word.
+
+        Parameters
+        ----------
+        words : list[list[str]]
+            Current state of the corpus (each word = list of symbols).
+        pair : tuple[str, str]
+            The pair ``(a, b)`` to merge.
+        replacement : str
+            The merged symbol (typically ``a + b``).
+
+        Returns
+        -------
+        new_words : list[list[str]]
+            Corpus with the pair merged.
+        """
+        new_words = []
+        for word in words:
+            new_word = []
+            i = 0
+            while i < len(word):
+                if i < len(word) - 1 and (word[i], word[i + 1]) == pair:
+                    new_word.append(replacement)
+                    i += 2
+                else:
+                    new_word.append(word[i])
+                    i += 1
+            new_words.append(new_word)
+        return new_words
+
+    def train(self, texts: list[str]) -> None:
+        """Learn BPE merge rules from a corpus.
+
+        Pipeline:
+            1. Pre-tokenize each text into words
+            2. Split each word into characters (initial vocabulary)
+            3. Iteratively find and merge the most frequent adjacent pair
+            4. Record each merge with its rank
+            5. Build final vocabulary (base chars + merged tokens + special tokens)
+
+        Parameters
+        ----------
+        texts : list[str]
+            List of raw text strings (the training corpus).
+        """
+        words = [list(w) for t in texts for w in self._pre_tokenize(t)]
+        self.vocab = {s: i for i, s in enumerate(self.special_tokens)}
+        self.vocab.update(self._get_char_vocab(words))
+        self.id_to_token = {i: c for c, i in self.vocab.items()}
+
+        while len(self.vocab) < self.vocab_size:
+            pair_freqs = self._get_pair_freqs(words)
+
+            best_pair, best_freq = None, 0
+            for pair, freq in pair_freqs.items():
+                if freq > best_freq:
+                    best_pair, best_freq = pair, freq
+            if best_freq < 2:
+                break
+
+            merged = best_pair[0] + best_pair[1]
+            words = self._merge_pair(words, best_pair, merged)
+
+            next_id = len(self.vocab)
+            self.merges[best_pair] = merged
+            self.merge_ranks[best_pair] = len(self.merges)
+            self.vocab[merged] = next_id
+            self.id_to_token[next_id] = merged
+
+    def encode(self, text: str) -> list[int]:
+        """Convert a text string to a list of token IDs.
+
+        Pipeline:
+            1. Pre-tokenize the text into words
+            2. For each word, iteratively apply learned merges by rank
+            3. Convert final symbols to token IDs
+
+        Parameters
+        ----------
+        text : str
+            Raw input text.
+
+        Returns
+        -------
+        ids : list[int]
+            Sequence of integer token IDs.
+        """
+        # TODO (Phase 6-3): Implement BPE encoding.
+        #   - Call _pre_tokenize(text)
+        #   - For each word, apply merges in order of merge_ranks
+        #   - Convert symbols to IDs using self.vocab
+        #   - Unknown symbols -> special UNK token
+        pass
+
+    def decode(self, ids: list[int], skip_special_tokens: bool = True) -> str:
+        """Convert a list of token IDs back to text.
+
+        Parameters
+        ----------
+        ids : list[int]
+            Sequence of integer token IDs.
+        skip_special_tokens : bool, optional (default=True)
+            Whether to exclude special tokens from the output.
+
+        Returns
+        -------
+        text : str
+            Decoded text string.
+        """
+        # TODO (Phase 6-3): Implement BPE decoding.
+        #   - Look up each ID in self.id_to_token
+        #   - Special tokens are filtered if skip_special_tokens=True
+        #   - Concatenate tokens into a string
+        #   - Add spaces between words (or reconstruct original spacing)
+        pass
+
+    def __len__(self) -> int:
+        """Number of tokens in the vocabulary."""
+        return len(self.vocab)
+
+    def __repr__(self) -> str:
+        return (
+            f"BPETokenizer(vocab_size={self.vocab_size}, "
+            f"learned_merges={len(self.merges)})"
+        )
 
 
 class TokenEmbedding(nn.Module):

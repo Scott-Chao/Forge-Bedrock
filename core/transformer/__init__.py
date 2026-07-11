@@ -6,7 +6,7 @@ component from first principles using PyTorch.
 """
 
 from core.transformer.data import CharLevelDataset, create_dataloaders
-from core.transformer.embedding import CharTokenizer, TokenEmbedding
+from core.transformer.embedding import BPETokenizer, CharTokenizer, TokenEmbedding
 from core.transformer.kv_cache import KVCache
 from core.transformer.normalization import RMSNorm
 from core.transformer.sampling import sample, sample_argmax, sample_top_k, sample_top_p
@@ -22,6 +22,7 @@ from core.transformer.transformer import (
 )
 
 __all__ = [
+    "BPETokenizer",
     "scaled_dot_product_attention",
     "MultiHeadAttention",
     "RMSNorm",

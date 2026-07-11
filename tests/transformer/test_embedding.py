@@ -5,6 +5,7 @@ tests/transformer/test_embedding.py — Tests for TokenEmbedding and CharTokeniz
 import pytest
 import torch
 from core.transformer.embedding import (
+    BPETokenizer,
     CharTokenizer,
     TokenEmbedding,
     _build_default_vocab,
@@ -225,3 +226,132 @@ class TestTokenEmbedding:
         params = list(emb.parameters())
         assert len(params) == 1, "should have exactly one parameter"
         assert params[0].shape == (70, 16), "parameter should be the embedding matrix"
+
+
+class TestBPETokenizer:
+    """Tests for the BPE tokenizer (Phase 6)."""
+
+    # ------------------------------------------------------------------
+    # Pre-tokenization
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize(
+        "text, expected",
+        [
+            ("Hello, world!", ["Hello", "world"]),
+            ("Let's go", ["Let", "s", "go"]),
+            ("", []),
+            ("!@#$ %%%", []),
+            ("abc123_def", ["abc123_def"]),  # \w includes underscore
+        ],
+    )
+    def test_pre_tokenize(self, text, expected):
+        """_pre_tokenize should split text into words by \\w+."""
+        tok = BPETokenizer()
+        assert tok._pre_tokenize(text) == expected
+
+    # ------------------------------------------------------------------
+    # Character vocabulary
+    # ------------------------------------------------------------------
+
+    def test_get_char_vocab_simple(self):
+        """_get_char_vocab should collect unique chars with IDs after special."""
+        tok = BPETokenizer(special_tokens=["<PAD>", "<UNK>"])
+        words = ["hello", "world"]
+        vocab = tok._get_char_vocab(words)
+        # sorted(chars) = ['d','e','h','l','o','r','w'] → IDs start at 2
+        assert vocab["d"] == 2
+        assert vocab["e"] == 3
+        assert vocab["h"] == 4
+        assert set(vocab.keys()) == {"h", "e", "l", "o", "w", "r", "d"}
+        # Special tokens should NOT be in char vocab
+        assert "<PAD>" not in vocab
+        assert "<UNK>" not in vocab
+
+    # ------------------------------------------------------------------
+    # Pair frequency
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize(
+        "words, expected_pairs",
+        [
+            ([["a", "b", "c"]], {("a", "b"): 1, ("b", "c"): 1}),
+            ([["a", "b"], ["a", "b"]], {("a", "b"): 2}),
+            ([["x"]], {}),  # single symbol → no pairs
+            ([["a", "a", "a"]], {("a", "a"): 2}),  # overlapping non-merge
+        ],
+    )
+    def test_get_pair_freqs(self, words, expected_pairs):
+        """_get_pair_freqs should count adjacent pairs correctly."""
+        tok = BPETokenizer()
+        assert tok._get_pair_freqs(words) == expected_pairs
+
+    # ------------------------------------------------------------------
+    # Merge pair
+    # ------------------------------------------------------------------
+
+    def test_merge_pair_basic(self):
+        """_merge_pair should replace all non-overlapping occurrences."""
+        tok = BPETokenizer()
+        words = [["a", "b", "c"], ["a", "b", "a", "b"]]
+        result = tok._merge_pair(words, ("a", "b"), "ab")
+        assert result == [["ab", "c"], ["ab", "ab"]]
+
+    def test_merge_pair_overlap(self):
+        """Overlapping pairs should not be double-merged."""
+        tok = BPETokenizer()
+        words = [["a", "a", "a"]]
+        result = tok._merge_pair(words, ("a", "a"), "aa")
+        assert result == [["aa", "a"]]
+
+    def test_merge_pair_no_match(self):
+        """When no pair matches, words should be unchanged."""
+        tok = BPETokenizer()
+        words = [["x", "y", "z"]]
+        result = tok._merge_pair(words, ("a", "b"), "ab")
+        assert result == [["x", "y", "z"]]
+
+    # ------------------------------------------------------------------
+    # Full training pipeline
+    # ------------------------------------------------------------------
+
+    def test_train_creates_vocab_and_merges(self):
+        """train should populate vocab, merges, and merge_ranks."""
+        tok = BPETokenizer(vocab_size=12)
+        tok.train(["low low new"])
+        # 4 special + 5 chars (e,l,n,o,w) + up to 3 merges = 12 max, but
+        # corpus is small so freq drops below 2 after ~2 merges
+        assert len(tok.vocab) >= 9  # at least special + chars
+        assert len(tok.merges) >= 1
+        assert len(tok.merge_ranks) == len(tok.merges)
+        # Special tokens should be in vocab
+        for s in tok.special_tokens:
+            assert s in tok.vocab
+        # Base characters should be in vocab
+        for c in "lowen":
+            assert c in tok.vocab
+
+    def test_train_subword_formation(self):
+        """Common pairs should be merged into subword tokens."""
+        tok = BPETokenizer(vocab_size=12)
+        tok.train(["low low new"])
+        merged_tokens = {k for k in tok.vocab if len(k) > 1 and not k.startswith("<")}
+        assert len(merged_tokens) >= 1, "should have at least one merged subword"
+
+    def test_train_larger_corpus(self):
+        """Training on more text should produce more meaningful merges."""
+        text = "the cat sat on the mat the rat hat"
+        tok = BPETokenizer(vocab_size=30)
+        tok.train([text])
+        # Should have merged "th" or "he" or "at" — common English bigrams
+        merged = {k for k in tok.vocab if len(k) > 1}
+        assert len(merged) > 1
+
+    def test_train_tie_breaking_deterministic(self):
+        """Same corpus should produce same merges."""
+        tok1 = BPETokenizer(vocab_size=15)
+        tok2 = BPETokenizer(vocab_size=15)
+        tok1.train(["hello world foo bar baz"])
+        tok2.train(["hello world foo bar baz"])
+        assert tok1.merges == tok2.merges
+        assert tok1.vocab == tok2.vocab

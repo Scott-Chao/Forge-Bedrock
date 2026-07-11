@@ -114,8 +114,8 @@ Build a Decoder-Only Transformer (GPT-family) on PyTorch. First-principles minim
 ### Phase 6: Transformer — BPE, GQA, MoE
 Phase 5's minimal GPT gets three modular upgrades: subword tokenization (BPE), grouped-query attention (GQA), and mixture of experts (MoE).
 - [ ] **BPE Tokenizer**
-    - [ ] Pre-tokenization: `re.findall(r'\w+', text)` whitespace split
-    - [ ] Core training: frequency-based merge loop, pairs within pre-tokenized words only
+    - [x] Pre-tokenization: `re.findall(r'\w+', text)` whitespace split
+    - [x] Core training: frequency-based merge loop, pairs within pre-tokenized words only
     - [ ] Inference: encode (text → IDs via merge-rank lookup), decode (IDs → text via table)
 - [ ] **GQA (Grouped Query Attention)**
     - [ ] Extend `MultiHeadAttention` with `n_kv_heads` parameter
