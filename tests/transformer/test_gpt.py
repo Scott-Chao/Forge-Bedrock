@@ -4,7 +4,7 @@ tests/transformer/test_gpt.py — Tests for the full GPT model.
 
 import pytest
 import torch
-from core.transformer.gpt import GPT
+from core.transformer.transformer import GPT
 
 
 class TestGPT:
@@ -110,7 +110,7 @@ class TestGPT:
 
     def test_blocks_are_gptblocks(self, tiny_gpt):
         """Each element in blocks should be a GPTBlock."""
-        from core.transformer.block import GPTBlock
+        from core.transformer.transformer import GPTBlock
 
         for i, block in enumerate(tiny_gpt.blocks):
             assert isinstance(block, GPTBlock), (
@@ -162,7 +162,7 @@ class TestGPT:
         logits_auto = tiny_gpt(tokens)
 
         # Now manually create a mask and compare
-        from core.transformer.attention import _create_causal_mask
+        from core.transformer.transformer import _create_causal_mask
 
         seq_len = tokens.size(1)
         mask = _create_causal_mask(seq_len)

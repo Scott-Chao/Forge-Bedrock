@@ -3,7 +3,7 @@ tests/transformer/test_feedforward.py — Tests for FeedForward.
 """
 
 import torch
-from core.transformer.feedforward import FeedForward
+from core.transformer.transformer import FeedForward
 
 
 class TestFeedForward:

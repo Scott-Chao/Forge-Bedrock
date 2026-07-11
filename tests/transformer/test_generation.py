@@ -4,7 +4,7 @@ tests/transformer/test_generation.py — Tests for GPT.generate().
 
 import pytest
 import torch
-from core.transformer.gpt import GPT
+from core.transformer.transformer import GPT
 
 
 class TestGenerate:

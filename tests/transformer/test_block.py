@@ -4,7 +4,7 @@ tests/transformer/test_block.py — Tests for GPTBlock.
 
 import pytest
 import torch
-from core.transformer.block import GPTBlock
+from core.transformer.transformer import GPTBlock
 
 
 class TestGPTBlock:
@@ -42,13 +42,13 @@ class TestGPTBlock:
 
     def test_attn_is_multihead(self, small_block):
         """Attention module should be MultiHeadAttention."""
-        from core.transformer.attention import MultiHeadAttention
+        from core.transformer.transformer import MultiHeadAttention
 
         assert isinstance(small_block.attn, MultiHeadAttention)
 
     def test_ff_is_feedforward(self, small_block):
         """FeedForward module should be FeedForward."""
-        from core.transformer.feedforward import FeedForward
+        from core.transformer.transformer import FeedForward
 
         assert isinstance(small_block.ff, FeedForward)
 

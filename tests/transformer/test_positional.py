@@ -4,7 +4,7 @@ tests/transformer/test_positional.py — Tests for RoPE (production split-half v
 
 import pytest
 import torch
-from core.transformer.positional import (
+from core.transformer.transformer import (
     RotaryEmbedding,
     apply_rotary_emb,
     precompute_freqs_cis,

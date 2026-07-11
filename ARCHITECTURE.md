@@ -31,15 +31,16 @@ forge-bedrock/
 │   ├── info_theory.py     # Entropy, KL Divergence, Cross-Entropy
 │   └── bias_variance.py   # Bias-variance decomposition simulation
 ├── core/transformer/      # Decoder-only Transformer (GPT) on PyTorch (Phase 5)
-│   ├── attention.py       # Scaled Dot-Product Attention, MultiHeadAttention + KV cache
-│   ├── block.py           # GPTBlock: RMSNorm → Attn → RMSNorm → FFN (Pre-Norm residual)
+│   ├── transformer.py     # All Transformer-specific components in one file:
+│   │                      #   scaled_dot_product_attention + MultiHeadAttention
+│   │                      #   RoPE (precompute_freqs_cis, apply_rotary_emb, RotaryEmbedding)
+│   │                      #   FeedForward (d_model → d_ff → d_model, d_ff = 4×d_model)
+│   │                      #   GPTBlock (RMSNorm → Attn → RMSNorm → FFN, Pre-Norm residual)
+│   │                      #   GPT (TokenEmbed → N×GPTBlock → RMSNorm → lm_head → logits)
+│   ├── normalization.py   # RMSNorm: γ ⊙ x / √(mean(x²) + ε) — follows nn.modules.normalization
 │   ├── data.py            # Char-level corpus loading + CharLevelDataset + DataLoader builder
 │   ├── embedding.py       # CharTokenizer (vocab ~70) + TokenEmbedding lookup
-│   ├── feedforward.py     # ReLU FeedForward: d_model → d_ff → d_model, d_ff = 4×d_model
-│   ├── gpt.py             # GPT: TokenEmbed → N×GPTBlock → RMSNorm → lm_head → logits
-│   ├── kv_cache.py        # O(n²) → O(n) decode: KVCache + KVCacheManager
-│   ├── normalization.py   # RMSNorm: γ ⊙ x / √(mean(x²) + ε)
-│   ├── positional.py      # RoPE: precompute_freqs_cis, apply_rotary_emb, RotaryEmbedding
+│   ├── kv_cache.py        # O(n²) → O(n) decode: KVCache
 │   └── sampling.py        # Token sampling: argmax → Temperature → Top-k → Top-p (nucleus)
 ├── apps/                  # Application Jupyter Notebooks
 │   ├── image_compression.ipynb        # SVD-based low-rank image compression
@@ -61,7 +62,7 @@ forge-bedrock/
 │   ├── autograd/          # Tests for Phase 2 (value, functional with finite differences)
 │   ├── nn/                # Tests for Phase 2–4 (all layers, losses, optimisers, schedulers)
 │   ├── prob/              # Tests for Phase 3 (distributions, info theory)
-│   └── transformer/       # Tests for Phase 5 (attention, block, GPT, sampling, generation)
+│   └── transformer/       # Tests for Phase 5 (transformer, normalization, sampling, generation)
 │
 ├── assets/                # Static resources (images, etc.)
 └── environment.yml        # conda environment
