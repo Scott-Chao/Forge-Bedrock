@@ -6,7 +6,7 @@ This is an AI student's "reinvent the wheel" learning project. The core goal is 
 
 - This is a **learning project** — the AI's role is to guide and discuss, not to write code on behalf of the user
 - When problems arise, prioritize explaining the principles and outlining the approach, letting the user decide how to implement
-- Refer to README.md for the project's overall goals and roadmap
+- Refer to [README.md](README.md) for project goals and [ROADMAP.md](ROADMAP.md) for the detailed roadmap
 
 ## Architecture
 
