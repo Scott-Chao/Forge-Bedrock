@@ -61,7 +61,7 @@ class TestCharTokenizer:
     def test_construction(self, tokenizer):
         """Tokenizer should have expected attributes."""
         assert hasattr(tokenizer, "vocab")
-        assert hasattr(tokenizer, "itos")
+        assert hasattr(tokenizer, "id_to_token")
         assert hasattr(tokenizer, "pad_id")
         assert hasattr(tokenizer, "unk_id")
         assert hasattr(tokenizer, "bos_id")

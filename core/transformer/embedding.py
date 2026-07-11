@@ -8,6 +8,11 @@ Tokenizers convert text to/from integer token IDs:
 The TokenEmbedding layer maps token IDs to dense vectors.
 
     text → [CharTokenizer|BPETokenizer] → token_ids → [TokenEmbedding] → vectors
+
+Tokenizer hierarchy
+-------------------
+Both tokenizer classes share common encode/decode infrastructure
+through a lightweight ``Tokenizer`` base class.
 """
 
 from __future__ import annotations
@@ -34,12 +39,92 @@ def _build_default_vocab() -> dict[str, int]:
     Total ~80-85 characters. The exact count is flexible.
     """
     special_tokens = ["<PAD>", "<UNK>", "<BOS>", "<EOS>"]
-    chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?:;\"'()-[]{}&%$@#*/\\ \n\t"
+    chars = (
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "0123456789.,!?:;\"'()-[]{}&%$@#*/\\ \n\t"
+    )
     all_tokens = special_tokens + list(chars)
     return {token: i for i, token in enumerate(all_tokens)}
 
 
-class CharTokenizer:
+class Tokenizer:
+    """Base class for tokenizers.
+
+    Provides shared ``decode``, ``__len__``, and ``vocab_size``
+    infrastructure. Subclasses must implement ``encode`` and set up
+    their own ``vocab`` / ``id_to_token`` in ``__init__``.
+
+    Parameters
+    ----------
+    special_tokens : list[str] | None, optional
+        Tokens reserved for special purposes (PAD, UNK, BOS, EOS).
+        If None, defaults to ``["<PAD>", "<UNK>", "<BOS>", "<EOS>"]``.
+    """
+
+    def __init__(self, special_tokens: list[str] | None = None):
+        if special_tokens is None:
+            special_tokens = ["<PAD>", "<UNK>", "<BOS>", "<EOS>"]
+        self.special_tokens = special_tokens
+        self.vocab: dict[str, int] = {}
+        self.id_to_token: dict[int, str] = {}
+
+    @property
+    def pad_id(self) -> int:
+        """Index of the padding token (defaults to 0)."""
+        return self.vocab.get("<PAD>", 0)
+
+    @property
+    def unk_id(self) -> int:
+        """Index of the unknown token (defaults to 1)."""
+        return self.vocab.get("<UNK>", 1)
+
+    @property
+    def bos_id(self) -> int:
+        """Index of the beginning-of-sequence token (defaults to 2)."""
+        return self.vocab.get("<BOS>", 2)
+
+    @property
+    def eos_id(self) -> int:
+        """Index of the end-of-sequence token (defaults to 3)."""
+        return self.vocab.get("<EOS>", 3)
+
+    def encode(self, text: str) -> list[int]:
+        """Convert text to a list of token IDs.
+
+        Subclasses must override this with their specific encoding logic.
+        """
+        raise NotImplementedError
+
+    def decode(self, ids: list[int], skip_special_tokens: bool = True) -> str:
+        """Convert a list of token IDs back to text.
+
+        Parameters
+        ----------
+        ids : list[int]
+            Sequence of integer token IDs.
+        skip_special_tokens : bool, optional (default=True)
+            If True, exclude special tokens from the output.
+
+        Returns
+        -------
+        text : str
+            Decoded string.
+        """
+        tokens = [self.id_to_token[i] for i in ids]
+        if skip_special_tokens:
+            tokens = [t for t in tokens if t not in self.special_tokens]
+        return "".join(tokens)
+
+    @property
+    def vocab_size(self) -> int:
+        """Number of tokens currently in the vocabulary."""
+        return len(self.vocab)
+
+    def __len__(self) -> int:
+        return len(self.vocab)
+
+
+class CharTokenizer(Tokenizer):
     """Character-level tokenizer for a minimal GPT.
 
     Converts text strings to/from sequences of integer token IDs using
@@ -53,21 +138,27 @@ class CharTokenizer:
     """
 
     def __init__(self, vocab: dict[str, int] | None = None):
+        super().__init__()
         if vocab is None:
             vocab = _build_default_vocab()
         self.vocab = vocab
-
-        self.itos = {i: c for c, i in vocab.items()}
-
-        self.pad_id = vocab.get("<PAD>", 0)
-        self.unk_id = vocab.get("<UNK>", 1)
-        self.bos_id = vocab.get("<BOS>", 2)
-        self.eos_id = vocab.get("<EOS>", 3)
+        self.id_to_token = {i: c for c, i in vocab.items()}
 
     @property
-    def vocab_size(self) -> int:
-        """Total number of tokens in the vocabulary."""
-        return len(self.vocab)
+    def pad_id(self) -> int:
+        return self.vocab.get("<PAD>", 0)
+
+    @property
+    def unk_id(self) -> int:
+        return self.vocab.get("<UNK>", 1)
+
+    @property
+    def bos_id(self) -> int:
+        return self.vocab.get("<BOS>", 2)
+
+    @property
+    def eos_id(self) -> int:
+        return self.vocab.get("<EOS>", 3)
 
     def encode(self, text: str, add_special_tokens: bool = True) -> list[int]:
         """Convert a text string to a list of token IDs.
@@ -89,34 +180,11 @@ class CharTokenizer:
             ids = [self.bos_id] + ids + [self.eos_id]
         return ids
 
-    def decode(self, ids: list[int], skip_special_tokens: bool = True) -> str:
-        """Convert a list of token IDs back to a string.
-
-        Parameters
-        ----------
-        ids : list[int]
-            Sequence of integer token IDs.
-        skip_special_tokens : bool, optional (default=True)
-            If True, exclude <PAD>, <UNK>, <BOS>, <EOS> from the output.
-
-        Returns
-        -------
-        text : str
-            Decoded string.
-        """
-        if skip_special_tokens:
-            special = {self.pad_id, self.unk_id, self.bos_id, self.eos_id}
-            return "".join(self.itos[i] for i in ids if i not in special)
-        return "".join(self.itos[i] for i in ids)
-
-    def __len__(self) -> int:
-        return self.vocab_size
-
     def __repr__(self) -> str:
         return f"CharTokenizer(vocab_size={self.vocab_size})"
 
 
-class BPETokenizer:
+class BPETokenizer(Tokenizer):
     """Byte Pair Encoding tokenizer.
 
     Learns a subword vocabulary by iteratively merging the most frequent
@@ -130,21 +198,13 @@ class BPETokenizer:
     special_tokens : list[str] | None, optional
         Special tokens like ``["<PAD>", "<UNK>", "<BOS>", "<EOS>"]``.
         These occupy the first N IDs in the vocabulary.
-    regex_pattern : str, optional (default=r'\\w+|\\s+')
-        Regex pattern for pre-tokenization (splitting text into "words").
-        The default pattern ``r'\\w+|\\s+'`` matches word characters and
-        whitespace as separate tokens, keeping spacing information in the
-        vocabulary so that ``decode(encode(text))`` recovers original
-        whitespace.
-        Non-word, non-space characters (punctuation, apostrophes, etc.)
-        are discarded.
+    regex_pattern : str, optional (default=r'\\w+|\\s+|[^\\w\\s]')
+        Regex pattern for pre-tokenization. The default matches word
+        characters, whitespace, and individual punctuation as separate
+        pre-tokens, preserving formatting for encode/decode roundtrips.
 
     Attributes
     ----------
-    vocab : dict[str, int]
-        Token-to-ID mapping (populated after training).
-    id_to_token : dict[int, str]
-        ID-to-token mapping (inverse of vocab).
     merges : dict[tuple[str, str], str]
         Learned merge rules: ``(left, right) -> merged_token``.
     merge_ranks : dict[tuple[str, str], int]
@@ -157,16 +217,9 @@ class BPETokenizer:
         special_tokens: list[str] | None = None,
         regex_pattern: str = r"\w+|\s+|[^\w\s]",
     ):
-        if special_tokens is None:
-            special_tokens = ["<PAD>", "<UNK>", "<BOS>", "<EOS>"]
-
-        self.vocab_size = vocab_size
-        self.special_tokens = special_tokens
+        super().__init__(special_tokens)
+        self._target_vocab_size = vocab_size
         self.regex_pattern = regex_pattern
-
-        # Populated during training
-        self.vocab: dict[str, int] = {}
-        self.id_to_token: dict[int, str] = {}
         self.merges: dict[tuple[str, str], str] = {}
         self.merge_ranks: dict[tuple[str, str], int] = {}
 
@@ -289,7 +342,7 @@ class BPETokenizer:
         self.vocab.update(self._get_char_vocab(words))
         self.id_to_token = {i: c for c, i in self.vocab.items()}
 
-        while len(self.vocab) < self.vocab_size:
+        while len(self.vocab) < self._target_vocab_size:
             pair_freqs = self._get_pair_freqs(words)
             if not pair_freqs:
                 break
@@ -340,7 +393,7 @@ class BPETokenizer:
 
         return symbols
 
-    def encode(self, text: str) -> list[int]:
+    def encode(self, text: str, **kwargs) -> list[int]:
         """Convert a text string to a list of token IDs.
 
         Pipeline:
@@ -352,6 +405,9 @@ class BPETokenizer:
         ----------
         text : str
             Raw input text.
+        **kwargs
+            Ignored extra keyword arguments for API compatibility with
+            ``CharLevelDataset`` (which passes ``add_special_tokens=False``).
 
         Returns
         -------
