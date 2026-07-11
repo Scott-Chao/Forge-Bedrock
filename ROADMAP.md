@@ -110,3 +110,24 @@ Build a Decoder-Only Transformer (GPT-family) on PyTorch. First-principles minim
 - [x] **Analysis Notebooks** — understanding what you built
     - [x] Attention pattern + RoPE heatmap visualization
     - [x] Temperature / Top-k / Top-p sampling comparison
+
+### Phase 6: Transformer — BPE, GQA, MoE
+Phase 5's minimal GPT gets three modular upgrades: subword tokenization (BPE), grouped-query attention (GQA), and mixture of experts (MoE).
+- [ ] **BPE Tokenizer**
+    - [ ] Pre-tokenization: `re.findall(r'\w+', text)` whitespace split
+    - [ ] Core training: frequency-based merge loop, pairs within pre-tokenized words only
+    - [ ] Inference: encode (text → IDs via merge-rank lookup), decode (IDs → text via table)
+- [ ] **GQA (Grouped Query Attention)**
+    - [ ] Extend `MultiHeadAttention` with `n_kv_heads` parameter
+    - [ ] KV weight sharing: single K/V projection broadcast across Q-head groups via `repeat_interleave`
+    - [ ] KV cache integration: cache shape `(batch, n_kv_heads, ...)`, expansion at attention time
+- [ ] **MoE (Mixture of Experts)**
+    - [ ] Router: `W_gate ∈ R^{n_experts × d_model}`, top-2 softmax (`k=2`, `n_experts=8`)
+    - [ ] Sparse dispatch: token scatter → per-expert ReLU FFN → weighted combine
+    - [ ] Load balancing: auxiliary importance loss (coefficient ~1e-2)
+    - [ ] Integration: replace `GPTBlock.ffn` via `GPTConfig(moe=True, ...)`
+    - [ ] Smoke test: loss decreases on synthetic data in < 100 steps
+    - [ ] Training: 1 run on TinyShakespeare, loss curve vs Phase 5 baseline
+- [ ] **Analysis Notebooks**
+    - [ ] MoE routing: expert activation heatmaps, load uniformity, routing entropy
+    - [ ] Ablation comparison: total params / active params / KV cache / perplexity across Dense, +GQA, +MoE, +GQA+MoE

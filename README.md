@@ -30,6 +30,9 @@ Gradient descent fails in predictable ways. Each technique is a targeted fix: di
 ### Phase 5: Transformer — Mini-GPT
 Build a Decoder-Only Transformer (GPT-family) on PyTorch. First-principles minimal set — each component is the irreducible core; optimizations are added on top after the base works.
 
+### Phase 6: Transformer — BPE, GQA, MoE
+Phase 5's minimal GPT gets three modular upgrades: subword tokenization (BPE), grouped-query attention (GQA), and mixture of experts (MoE).
+
 [Full detailed roadmap → ROADMAP.md](ROADMAP.md)
 
 [Architecture overview → ARCHITECTURE.md](ARCHITECTURE.md)
