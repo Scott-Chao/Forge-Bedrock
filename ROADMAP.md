@@ -121,7 +121,7 @@ Phase 5's minimal GPT gets three modular upgrades: subword tokenization (BPE), g
     - [x] MHA extension: `n_kv_heads` → smaller K/V projections, `repeat_interleave` broadcast, KV cache shape `(batch, n_kv_heads, ...)`
     - [x] Model penetration: thread `n_kv_heads` through `GPTBlock` → `GPT` → `generate()`
 - [ ] **MoE (Mixture of Experts)**
-    - [ ] Router: `W_gate ∈ R^{n_experts × d_model}`, top-2 softmax (`k=2`, `n_experts=8`)
+    - [x] Router: `W_gate ∈ R^{n_experts × d_model}`, top-2 softmax (`k=2`, `n_experts=8`)
     - [ ] Sparse dispatch: token scatter → per-expert ReLU FFN → weighted combine
     - [ ] Load balancing: auxiliary importance loss (coefficient ~1e-2)
     - [ ] Integration: replace `GPTBlock.ffn` via `GPTConfig(moe=True, ...)`
