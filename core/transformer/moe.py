@@ -9,7 +9,7 @@ cost of higher total parameter count.
 Components
 ----------
 - MoERouter: top-k softmax gating network
-- MoEFFN (future): sparse expert dispatch + weighted combination
+- MoEFFN: sparse expert dispatch + weighted combination + load balancing loss
 """
 
 from __future__ import annotations
@@ -87,8 +87,9 @@ class MoEFFN(nn.Module):
         3. Each expert (a ReLU FFN) processes its tokens
         4. Outputs are weighted-combined using routing weights
 
-    This gives more total parameters than a dense FFN while keeping
-    per-token FLOPs roughly constant (since k << n_experts).
+    An **auxiliary load-balancing loss** is computed during forward and
+    returned alongside the output. This loss encourages the router to
+    distribute tokens uniformly across experts.
 
     Parameters
     ----------
@@ -103,6 +104,9 @@ class MoEFFN(nn.Module):
         Must be <= n_experts.
     bias : bool, optional (default=True)
         Whether to use bias in the expert linear projections.
+    aux_loss_coef : float, optional (default=1e-2)
+        Coefficient scaling the auxiliary load-balancing loss.
+        Typical range: 1e-3 ~ 1e-2.
     """
 
     def __init__(
@@ -112,6 +116,7 @@ class MoEFFN(nn.Module):
         n_experts: int = 8,
         k: int = 2,
         bias: bool = True,
+        aux_loss_coef: float = 1e-2,
     ):
         super().__init__()
 
@@ -119,6 +124,7 @@ class MoEFFN(nn.Module):
         self.d_ff = d_ff
         self.n_experts = n_experts
         self.k = k
+        self.aux_loss_coef = aux_loss_coef
 
         self.router = MoERouter(d_model, n_experts, k)
 
@@ -126,8 +132,10 @@ class MoEFFN(nn.Module):
             [FeedForward(d_model, d_ff, bias) for _ in range(n_experts)]
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Forward pass: route -> dispatch -> expert forward -> weighted combine.
+
+        Also computes the auxiliary load-balancing loss.
 
         Parameters
         ----------
@@ -136,8 +144,14 @@ class MoEFFN(nn.Module):
 
         Returns
         -------
-        output : (batch_size, seq_len, d_model)
-            Weighted combination of expert outputs.
+        (output, aux_loss) : tuple[torch.Tensor, torch.Tensor]
+
+            output : (batch_size, seq_len, d_model)
+                Weighted combination of expert outputs.
+
+            aux_loss : scalar tensor (0-dim)
+                Load-balancing auxiliary loss (not yet scaled by
+                ``aux_loss_coef`` — the caller multiplies).
         """
         # ── Stage 1: Route ─────────────────────────────────────────────
         weights, indices = self.router(x)
@@ -161,4 +175,19 @@ class MoEFFN(nn.Module):
 
         # ── Stage 4: Reshape back ─────────────────────────────────────
         output = output_flat.reshape(x.shape)
-        return output
+
+        # ── Auxiliary Load-Balancing Loss ──────────────────────────────
+        logits = self.router.gate(x)
+        full_probs = F.softmax(logits, dim=-1)
+
+        T = x.size(0) * x.size(1)
+        counts = torch.bincount(
+            indices_flat.reshape(-1), minlength=self.n_experts
+        ).float()
+        f_i = counts / (T * self.k)
+
+        P_i = full_probs.mean(dim=(0, 1))
+
+        aux_loss = self.n_experts * (f_i * P_i).sum()
+
+        return output, aux_loss

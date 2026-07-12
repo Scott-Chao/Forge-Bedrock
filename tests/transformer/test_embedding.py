@@ -357,6 +357,14 @@ class TestBPETokenizer:
         assert tok1.merges == tok2.merges
         assert tok1.vocab == tok2.vocab
 
+    def test_train_vocab_size_too_small(self):
+        """When vocab_size <= special+chars, no merges happen — no crash."""
+        tok = BPETokenizer(vocab_size=6)  # 4 special + barely room for chars
+        tok.train(["hello world"])
+        # No merges possible, but shouldn't crash
+        assert len(tok.merges) == 0
+        assert len(tok.vocab) >= 4  # at least special tokens
+
     # ------------------------------------------------------------------
     # _encode_word
     # ------------------------------------------------------------------
