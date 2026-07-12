@@ -121,6 +121,91 @@ class TestScaledDotProductAttention:
         )
 
 
+class TestGQA:
+    """Tests for Grouped-Query Attention extension of MultiHeadAttention."""
+
+    @pytest.mark.parametrize(
+        "d_model, n_heads, n_kv_heads, expected_kv_out",
+        [
+            (64, 8, 4, 32),  # 8 heads, 4 KV heads → kv_dim = 8*4 = 32
+            (64, 8, 2, 16),  # 8 heads, 2 KV heads → kv_dim = 8*2 = 16
+            (64, 8, 8, 64),  # n_kv_heads = n_heads → kv_dim = d_model (MHA mode)
+            (64, 8, None, 64),  # None defaults to n_heads → kv_dim = d_model
+        ],
+    )
+    def test_kv_projection_dims(self, d_model, n_heads, n_kv_heads, expected_kv_out):
+        """W_k and W_v should project to n_kv_heads * d_k, not d_model."""
+        mha = MultiHeadAttention(d_model, n_heads, n_kv_heads=n_kv_heads)
+        assert mha.w_k.out_features == expected_kv_out, (
+            f"w_k.out_features = {mha.w_k.out_features}, expected {expected_kv_out}"
+        )
+        assert mha.w_v.out_features == expected_kv_out, (
+            f"w_v.out_features = {mha.w_v.out_features}, expected {expected_kv_out}"
+        )
+        # n_groups should be correct
+        expected_groups = n_heads // (n_kv_heads or n_heads)
+        assert mha.n_groups == expected_groups, (
+            f"n_groups = {mha.n_groups}, expected {expected_groups}"
+        )
+
+    @pytest.mark.parametrize("n_kv_heads", [4, 2, 1])
+    def test_gqa_output_shape(self, n_kv_heads):
+        """GQA forward should produce the same output shape as MHA."""
+        batch, seq_len, d_model, n_heads = 2, 6, 64, 8
+        mha = MultiHeadAttention(d_model, n_heads, n_kv_heads=n_kv_heads)
+        x = torch.randn(batch, seq_len, d_model)
+        out, (k_new, v_new) = mha(x, x, x)
+        assert out.shape == (batch, seq_len, d_model), (
+            f"output shape mismatch: {out.shape}"
+        )
+        # KV cache should store n_kv_heads, not n_heads
+        assert k_new.shape[1] == n_kv_heads, (
+            f"k_new has {k_new.shape[1]} heads, expected {n_kv_heads}"
+        )
+        assert v_new.shape[1] == n_kv_heads, (
+            f"v_new has {v_new.shape[1]} heads, expected {n_kv_heads}"
+        )
+
+    def test_gqa_with_kv_cache(self):
+        """GQA should work correctly with KV cache (past_kv with n_kv_heads)."""
+        batch, seq_len, d_model, n_heads, n_kv_heads = 2, 4, 32, 8, 2
+        mha = MultiHeadAttention(d_model, n_heads, n_kv_heads=n_kv_heads)
+        d_k = d_model // n_heads  # 4
+        x = torch.randn(batch, seq_len, d_model)
+
+        # First call: no cache
+        out1, (k_new, v_new) = mha(x, x, x)
+        assert k_new.shape == (batch, n_kv_heads, seq_len, d_k)
+
+        # Second call: feed a single new token with past cache
+        x_new = torch.randn(batch, 1, d_model)
+        out2, (k_new2, v_new2) = mha(x_new, x_new, x_new, past_kv=(k_new, v_new))
+        assert k_new2.shape == (batch, n_kv_heads, 1, d_k)
+        # Output should still be valid
+        assert out2.shape == (batch, 1, d_model)
+
+    def test_gqa_fewer_parameters_than_mha(self):
+        """GQA should save parameters in W_k and W_v."""
+        d_model, n_heads, n_kv_heads = 64, 8, 4
+        mha = MultiHeadAttention(d_model, n_heads, n_kv_heads=n_kv_heads)
+        full_mha = MultiHeadAttention(d_model, n_heads, n_kv_heads=n_heads)
+
+        kv_params_gqa = sum(p.numel() for p in [mha.w_k.weight, mha.w_v.weight])
+        kv_params_full = sum(
+            p.numel() for p in [full_mha.w_k.weight, full_mha.w_v.weight]
+        )
+        assert kv_params_gqa < kv_params_full, (
+            f"GQA KV params ({kv_params_gqa}) should be less than MHA ({kv_params_full})"
+        )
+        # Q and O projections should be the same
+        assert mha.w_q.weight.shape == full_mha.w_q.weight.shape
+
+    def test_gqa_invalid_n_kv_heads(self):
+        """n_heads must be divisible by n_kv_heads."""
+        with pytest.raises(ValueError, match="divisible"):
+            MultiHeadAttention(d_model=64, n_heads=8, n_kv_heads=3)
+
+
 class TestMultiHeadAttention:
     """Tests for MultiHeadAttention module."""
 

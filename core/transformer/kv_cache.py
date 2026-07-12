@@ -46,8 +46,12 @@ class KVCache:
 
     Each layer's cache entry is a tuple (k, v) where:
 
-        k : (batch_size, n_heads, cached_seq_len, d_k)
-        v : (batch_size, n_heads, cached_seq_len, d_k)
+        k : (batch_size, n_kv_heads, cached_seq_len, d_k)
+        v : (batch_size, n_kv_heads, cached_seq_len, d_k)
+
+    With GQA (Grouped Query Attention), ``n_kv_heads`` may be smaller than
+    ``n_heads`` — the per-head expansion via ``repeat_interleave`` happens
+    at attention time, *after* the cache lookup.
 
     The cache is layer-indexed so that each GPTBlock can update its own
     entry independently.

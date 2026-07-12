@@ -117,10 +117,9 @@ Phase 5's minimal GPT gets three modular upgrades: subword tokenization (BPE), g
     - [x] Pre-tokenization: `re.findall(r'\w+', text)` whitespace split
     - [x] Core training: frequency-based merge loop, pairs within pre-tokenized words only
     - [x] Inference: encode (text → IDs via merge-rank lookup), decode (IDs → text via table)
-- [ ] **GQA (Grouped Query Attention)**
-    - [ ] Extend `MultiHeadAttention` with `n_kv_heads` parameter
-    - [ ] KV weight sharing: single K/V projection broadcast across Q-head groups via `repeat_interleave`
-    - [ ] KV cache integration: cache shape `(batch, n_kv_heads, ...)`, expansion at attention time
+- [x] **GQA (Grouped Query Attention)**
+    - [x] MHA extension: `n_kv_heads` → smaller K/V projections, `repeat_interleave` broadcast, KV cache shape `(batch, n_kv_heads, ...)`
+    - [x] Model penetration: thread `n_kv_heads` through `GPTBlock` → `GPT` → `generate()`
 - [ ] **MoE (Mixture of Experts)**
     - [ ] Router: `W_gate ∈ R^{n_experts × d_model}`, top-2 softmax (`k=2`, `n_experts=8`)
     - [ ] Sparse dispatch: token scatter → per-expert ReLU FFN → weighted combine

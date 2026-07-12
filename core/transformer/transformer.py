@@ -183,16 +183,25 @@ class RotaryEmbedding(torch.nn.Module):
 
 
 class MultiHeadAttention(torch.nn.Module):
-    """Multi-Head Attention (Vaswani et al., 2017).
+    """Multi-Head / Grouped-Query Attention.
 
-    Instead of performing a single attention function, MultiHeadAttention
-    runs *h* independent attention heads in parallel, each with its own
-    learned linear projections for Q, K, V. The outputs are concatenated
-    and projected one final time with W^O.
+    Supports both standard Multi-Head Attention (MHA) and Grouped-Query
+    Attention (GQA, Ainslie et al., 2023).
 
-        MultiHead(Q, K, V) = Concat(head_1, ..., head_h) W^O
+    **MHA mode** (default, ``n_kv_heads=None``):
+        Each query head has its own K, V projection. The KV cache stores
+        one (K, V) pair per head.
 
-        where head_i = Attention(Q W_i^Q, K W_i^K, V W_i^V)
+            MultiHead(Q, K, V) = Concat(head_1, ..., head_h) W^O
+            where head_i = Attention(Q W_i^Q, K W_i^K, V W_i^V)
+
+    **GQA mode** (``n_kv_heads < n_heads``):
+        Multiple query heads **share** a single K, V pair. The KV cache
+        stores only ``n_kv_heads`` pairs — a direct memory saving.
+
+            n_groups = n_heads // n_kv_heads
+            K = K.repeat_interleave(n_groups, dim=1)   # expand at runtime
+            V = V.repeat_interleave(n_groups, dim=1)   # expand at runtime
 
     Important
     ---------
@@ -207,6 +216,9 @@ class MultiHeadAttention(torch.nn.Module):
         Input and output feature dimension.
     n_heads : int
         Number of parallel attention heads. Must divide d_model evenly.
+    n_kv_heads : int | None, optional (default=None)
+        Number of key/value heads (for GQA). If None, defaults to n_heads
+        (standard MHA). Must divide n_heads evenly.
     dropout : float, optional (default=0.0)
         Dropout rate applied to attention weights. Not strictly necessary
         for a minimal model, but standard practice.
@@ -215,7 +227,12 @@ class MultiHeadAttention(torch.nn.Module):
     """
 
     def __init__(
-        self, d_model: int, n_heads: int, dropout: float = 0.0, bias: bool = True
+        self,
+        d_model: int,
+        n_heads: int,
+        n_kv_heads: int | None = None,
+        dropout: float = 0.0,
+        bias: bool = True,
     ):
         super().__init__()
 
@@ -224,13 +241,24 @@ class MultiHeadAttention(torch.nn.Module):
                 f"d_model ({d_model}) must be divisible by n_heads ({n_heads})"
             )
 
+        if n_kv_heads is None:
+            n_kv_heads = n_heads  # default: standard MHA
+
+        if n_heads % n_kv_heads != 0:
+            raise ValueError(
+                f"n_heads ({n_heads}) must be divisible by n_kv_heads ({n_kv_heads})"
+            )
+
         self.d_model = d_model
         self.n_heads = n_heads
+        self.n_kv_heads = n_kv_heads
+        self.n_groups = n_heads // n_kv_heads
         self.d_k = d_model // n_heads  # dimension per head
 
+        kv_dim = self.d_k * n_kv_heads
         self.w_q = torch.nn.Linear(d_model, d_model, bias=bias)
-        self.w_k = torch.nn.Linear(d_model, d_model, bias=bias)
-        self.w_v = torch.nn.Linear(d_model, d_model, bias=bias)
+        self.w_k = torch.nn.Linear(d_model, kv_dim, bias=bias)
+        self.w_v = torch.nn.Linear(d_model, kv_dim, bias=bias)
         self.w_o = torch.nn.Linear(d_model, d_model, bias=bias)
 
         self.dropout = torch.nn.Dropout(dropout) if dropout > 0 else None
@@ -281,20 +309,25 @@ class MultiHeadAttention(torch.nn.Module):
         v = self.w_v(value)
 
         q = q.reshape(batch, -1, self.n_heads, self.d_k).transpose(1, 2)
-        k = k.reshape(batch, -1, self.n_heads, self.d_k).transpose(1, 2)
-        v = v.reshape(batch, -1, self.n_heads, self.d_k).transpose(1, 2)
+        k = k.reshape(batch, -1, self.n_kv_heads, self.d_k).transpose(1, 2)
+        v = v.reshape(batch, -1, self.n_kv_heads, self.d_k).transpose(1, 2)
 
         # ── RoPE: rotate Q and K in their per-head space ──────────────
         if rope is not None:
             q = rope(q)
             k = rope(k)
 
-        # ── KV Cache: keep new K, V reference before concatenation ──
+        # ── KV Cache: keep new K, V reference before expansion ──
         k_new, v_new = k, v
 
         if past_kv is not None:
             k = torch.cat([past_kv[0], k_new], dim=-2)
             v = torch.cat([past_kv[1], v_new], dim=-2)
+
+        # ── GQA: expand K, V to match Q head count by repeating groups ──
+        if self.n_groups > 1:
+            k = k.repeat_interleave(self.n_groups, dim=1)
+            v = v.repeat_interleave(self.n_groups, dim=1)
 
         out = scaled_dot_product_attention(q, k, v, mask)
 
@@ -387,6 +420,8 @@ class GPTBlock(nn.Module):
         Feature dimension of the model.
     n_heads : int
         Number of attention heads.
+    n_kv_heads : int | None, optional (default=None)
+        Number of key/value heads for GQA. If None, defaults to n_heads (MHA).
     max_seq_len : int, optional (default=2048)
         Maximum sequence length for RoPE precomputation and causal mask.
     d_ff : int | None, optional (default=None)
@@ -401,6 +436,7 @@ class GPTBlock(nn.Module):
         self,
         d_model: int,
         n_heads: int,
+        n_kv_heads: int | None = None,
         max_seq_len: int = 2048,
         d_ff: int | None = None,
         dropout: float = 0.0,
@@ -410,10 +446,13 @@ class GPTBlock(nn.Module):
 
         self.d_model = d_model
         self.n_heads = n_heads
+        self.n_kv_heads = n_kv_heads if n_kv_heads is not None else n_heads
         self.max_seq_len = max_seq_len
 
         self.norm_1 = RMSNorm(d_model)
-        self.attn = MultiHeadAttention(d_model, n_heads, dropout, bias)
+        self.attn = MultiHeadAttention(
+            d_model, n_heads, n_kv_heads=n_kv_heads, dropout=dropout, bias=bias
+        )
         self.norm_2 = RMSNorm(d_model)
         self.ff = FeedForward(d_model, d_ff, bias)
 
@@ -496,6 +535,8 @@ class GPT(nn.Module):
         Number of stacked GPTBlocks.
     n_heads : int
         Number of attention heads per block.
+    n_kv_heads : int | None, optional (default=None)
+        Number of key/value heads for GQA. If None, defaults to n_heads (MHA).
     max_seq_len : int, optional (default=2048)
         Maximum sequence length for RoPE and causal masks.
     d_ff : int | None, optional (default=None)
@@ -517,6 +558,7 @@ class GPT(nn.Module):
         d_model: int,
         n_layers: int,
         n_heads: int,
+        n_kv_heads: int | None = None,
         max_seq_len: int = 2048,
         d_ff: int | None = None,
         dropout: float = 0.0,
@@ -529,12 +571,21 @@ class GPT(nn.Module):
         self.d_model = d_model
         self.n_layers = n_layers
         self.n_heads = n_heads
+        self.n_kv_heads = n_kv_heads if n_kv_heads is not None else n_heads
         self.max_seq_len = max_seq_len
 
         self.token_embedding = TokenEmbedding(vocab_size, d_model)
         self.blocks = nn.ModuleList(
             [
-                GPTBlock(d_model, n_heads, max_seq_len, d_ff, dropout, bias)
+                GPTBlock(
+                    d_model,
+                    n_heads,
+                    n_kv_heads=n_kv_heads,
+                    max_seq_len=max_seq_len,
+                    d_ff=d_ff,
+                    dropout=dropout,
+                    bias=bias,
+                )
                 for _ in range(n_layers)
             ]
         )
