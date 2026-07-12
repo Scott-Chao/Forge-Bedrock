@@ -132,10 +132,11 @@ class MoEFFN(nn.Module):
             [FeedForward(d_model, d_ff, bias) for _ in range(n_experts)]
         )
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass: route -> dispatch -> expert forward -> weighted combine.
 
-        Also computes the auxiliary load-balancing loss.
+        Also computes the auxiliary load-balancing loss internally and
+        stores it in ``self._aux_loss`` (accessible via ``self.aux_loss``).
 
         Parameters
         ----------
@@ -144,14 +145,8 @@ class MoEFFN(nn.Module):
 
         Returns
         -------
-        (output, aux_loss) : tuple[torch.Tensor, torch.Tensor]
-
-            output : (batch_size, seq_len, d_model)
-                Weighted combination of expert outputs.
-
-            aux_loss : scalar tensor (0-dim)
-                Load-balancing auxiliary loss (not yet scaled by
-                ``aux_loss_coef`` — the caller multiplies).
+        output : (batch_size, seq_len, d_model)
+            Weighted combination of expert outputs.
         """
         # ── Stage 1: Route ─────────────────────────────────────────────
         weights, indices = self.router(x)
@@ -173,7 +168,6 @@ class MoEFFN(nn.Module):
             expert_output = self.experts[e](expert_input)
             output_flat[positions] += w.unsqueeze(-1) * expert_output
 
-        # ── Stage 4: Reshape back ─────────────────────────────────────
         output = output_flat.reshape(x.shape)
 
         # ── Auxiliary Load-Balancing Loss ──────────────────────────────
@@ -185,9 +179,12 @@ class MoEFFN(nn.Module):
             indices_flat.reshape(-1), minlength=self.n_experts
         ).float()
         f_i = counts / (T * self.k)
-
         P_i = full_probs.mean(dim=(0, 1))
+        self._aux_loss = self.n_experts * (f_i * P_i).sum()
 
-        aux_loss = self.n_experts * (f_i * P_i).sum()
+        return output
 
-        return output, aux_loss
+    @property
+    def aux_loss(self) -> torch.Tensor:
+        """The auxiliary load-balancing loss from the last forward pass."""
+        return self._aux_loss

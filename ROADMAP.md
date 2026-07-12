@@ -124,7 +124,7 @@ Phase 5's minimal GPT gets three modular upgrades: subword tokenization (BPE), g
     - [x] Router: `W_gate ∈ R^{n_experts × d_model}`, top-2 softmax (`k=2`, `n_experts=8`)
     - [x] Sparse dispatch: token scatter → per-expert ReLU FFN → weighted combine
     - [x] Load balancing: auxiliary importance loss (coefficient ~1e-2)
-    - [ ] Integration: replace `GPTBlock.ffn` via `GPTConfig(moe=True, ...)`
+    - [x] Integration: replace `GPTBlock.ffn` via `GPTConfig(moe=True, ...)`
     - [ ] Smoke test: loss decreases on synthetic data in < 100 steps
     - [ ] Training: 1 run on TinyShakespeare, loss curve vs Phase 5 baseline
 - [ ] **Analysis Notebooks**

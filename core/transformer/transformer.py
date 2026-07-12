@@ -441,6 +441,10 @@ class GPTBlock(nn.Module):
         d_ff: int | None = None,
         dropout: float = 0.0,
         bias: bool = True,
+        # MoE parameters
+        use_moe: bool = False,
+        n_experts: int = 8,
+        moe_k: int = 2,
     ):
         super().__init__()
 
@@ -448,13 +452,22 @@ class GPTBlock(nn.Module):
         self.n_heads = n_heads
         self.n_kv_heads = n_kv_heads if n_kv_heads is not None else n_heads
         self.max_seq_len = max_seq_len
+        self.use_moe = use_moe
 
         self.norm_1 = RMSNorm(d_model)
         self.attn = MultiHeadAttention(
             d_model, n_heads, n_kv_heads=n_kv_heads, dropout=dropout, bias=bias
         )
         self.norm_2 = RMSNorm(d_model)
-        self.ff = FeedForward(d_model, d_ff, bias)
+
+        d_ff = d_ff if d_ff is not None else 4 * d_model
+
+        if use_moe:
+            from core.transformer.moe import MoEFFN  # lazy import avoids circular ref
+
+            self.ff = MoEFFN(d_model, d_ff, n_experts, moe_k, bias)
+        else:
+            self.ff = FeedForward(d_model, d_ff, bias)
 
         self.rope = RotaryEmbedding(d_model // n_heads, max_seq_len)
 
@@ -564,6 +577,10 @@ class GPT(nn.Module):
         dropout: float = 0.0,
         bias: bool = True,
         tie_weights: bool = False,
+        # MoE parameters
+        use_moe: bool = False,
+        n_experts: int = 8,
+        moe_k: int = 2,
     ):
         super().__init__()
 
@@ -573,6 +590,7 @@ class GPT(nn.Module):
         self.n_heads = n_heads
         self.n_kv_heads = n_kv_heads if n_kv_heads is not None else n_heads
         self.max_seq_len = max_seq_len
+        self.use_moe = use_moe
 
         self.token_embedding = TokenEmbedding(vocab_size, d_model)
         self.blocks = nn.ModuleList(
@@ -585,6 +603,9 @@ class GPT(nn.Module):
                     d_ff=d_ff,
                     dropout=dropout,
                     bias=bias,
+                    use_moe=use_moe,
+                    n_experts=n_experts,
+                    moe_k=moe_k,
                 )
                 for _ in range(n_layers)
             ]
@@ -771,3 +792,17 @@ class GPT(nn.Module):
             f"n_layers={self.n_layers}, n_heads={self.n_heads}, "
             f"params={self.num_parameters:,})"
         )
+
+    @property
+    def aux_loss(self) -> torch.Tensor:
+        """Sum of auxiliary load-balancing losses from all MoE blocks.
+
+        Returns a zero scalar when MoE is not enabled.
+        """
+        if not self.use_moe:
+            return torch.tensor(0.0)
+        total = torch.tensor(0.0, device=next(self.parameters()).device)
+        for block in self.blocks:
+            if hasattr(block.ff, "aux_loss"):
+                total = total + block.ff.aux_loss
+        return total

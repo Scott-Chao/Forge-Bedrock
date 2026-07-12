@@ -65,7 +65,8 @@ class TestMoEFFN:
         batch, seq_len, d_model = 2, 8, 32
         moe = MoEFFN(d_model, d_ff=128, n_experts=4, k=2)
         x = torch.randn(batch, seq_len, d_model)
-        out, aux_loss = moe(x)
+        out = moe(x)
+        aux_loss = moe.aux_loss
         assert out.shape == (batch, seq_len, d_model)
         assert aux_loss.shape == torch.Size([])
         assert aux_loss.item() > 0
@@ -102,8 +103,8 @@ class TestMoEFFN:
         moe = MoEFFN(d_model, d_ff, n_experts=4, k=2)
         # Use enough tokens so every expert gets at least one
         x = torch.randn(2, 16, d_model, requires_grad=True)
-        out, aux_loss = moe(x)
-        loss = out.sum() + aux_loss
+        out = moe(x)
+        loss = out.sum() + moe.aux_loss
         loss.backward()
 
         assert x.grad is not None, "gradients should flow to input"
@@ -162,7 +163,8 @@ class TestMoEFFN:
             moe.router.gate.weight.zero_()
 
         x = torch.randn(4, 8, d_model)
-        _, aux_loss = moe(x)
+        moe(x)
+        aux_loss = moe.aux_loss
 
         # With uniform probs and k=1, each expert gets 1/n of tokens
         # aux_loss should be close to n * Σ((1/n) * (1/n)) = 1.0
@@ -184,13 +186,15 @@ class TestMoEFFN:
         # Uniform routing: all gate weights = 0
         with torch.no_grad():
             moe.router.gate.weight.zero_()
-        _, aux_base = moe(x)
+        moe(x)
+        aux_base = moe.aux_loss
 
         # Imbalanced: only expert 0 has non-zero weights
         with torch.no_grad():
             moe.router.gate.weight.zero_()
             moe.router.gate.weight[0, :] = 1.0
-        _, aux_biased = moe(x)
+        moe(x)
+        aux_biased = moe.aux_loss
 
         assert aux_biased > aux_base, (
             f"biased loss ({aux_biased.item():.6f}) should be > "
@@ -206,12 +210,12 @@ class TestMoEFFN:
         batch, seq_len, d_model = 1, 4, 16
         moe = MoEFFN(d_model, d_ff=64, n_experts=4, k=2)
         x = torch.randn(batch, seq_len, d_model)
-        out_original, _ = moe(x)
+        out_original = moe(x)
 
         # Change only position 2
         x_mod = x.clone()
         x_mod[:, 2, :] = torch.randn(d_model)
-        out_mod, _ = moe(x_mod)
+        out_mod = moe(x_mod)
 
         for pos in [0, 1, 3]:
             assert torch.allclose(
