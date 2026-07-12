@@ -17,6 +17,7 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from core.transformer.transformer import FeedForward
 
 
 class MoERouter(nn.Module):
@@ -74,3 +75,90 @@ class MoERouter(nn.Module):
         weights, indices = torch.topk(logits, self.k, dim=-1)
         weights = F.softmax(weights, dim=-1)
         return weights, indices
+
+
+class MoEFFN(nn.Module):
+    """Sparse Mixture of Experts FeedForward Network.
+
+    Replaces a standard dense FFN with a sparse MoE layer:
+
+        1. Router selects top-k experts for each token
+        2. Tokens are dispatched to their assigned experts
+        3. Each expert (a ReLU FFN) processes its tokens
+        4. Outputs are weighted-combined using routing weights
+
+    This gives more total parameters than a dense FFN while keeping
+    per-token FLOPs roughly constant (since k << n_experts).
+
+    Parameters
+    ----------
+    d_model : int
+        Input and output feature dimension.
+    d_ff : int
+        Hidden dimension of each expert's FeedForward network.
+    n_experts : int, optional (default=8)
+        Total number of experts.
+    k : int, optional (default=2)
+        Number of experts to activate per token (sparsity level).
+        Must be <= n_experts.
+    bias : bool, optional (default=True)
+        Whether to use bias in the expert linear projections.
+    """
+
+    def __init__(
+        self,
+        d_model: int,
+        d_ff: int,
+        n_experts: int = 8,
+        k: int = 2,
+        bias: bool = True,
+    ):
+        super().__init__()
+
+        self.d_model = d_model
+        self.d_ff = d_ff
+        self.n_experts = n_experts
+        self.k = k
+
+        self.router = MoERouter(d_model, n_experts, k)
+
+        self.experts = nn.ModuleList(
+            [FeedForward(d_model, d_ff, bias) for _ in range(n_experts)]
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass: route -> dispatch -> expert forward -> weighted combine.
+
+        Parameters
+        ----------
+        x : (batch_size, seq_len, d_model)
+            Input token representations (output of attention + residual).
+
+        Returns
+        -------
+        output : (batch_size, seq_len, d_model)
+            Weighted combination of expert outputs.
+        """
+        # ── Stage 1: Route ─────────────────────────────────────────────
+        weights, indices = self.router(x)
+
+        # ── Stage 2: Flatten batch & seq into a single token dimension ─
+        x_flat = x.reshape(-1, self.d_model)
+        weights_flat = weights.reshape(-1, self.k)
+        indices_flat = indices.reshape(-1, self.k)
+
+        # ── Stage 3: Dispatch and combine ─────────────────────────────
+        output_flat = torch.zeros_like(x_flat)
+        for e in range(self.n_experts):
+            mask = indices_flat == e
+            positions, which_k = torch.where(mask)
+            if len(positions) == 0:
+                continue
+            expert_input = x_flat[positions]
+            w = weights_flat[positions, which_k]
+            expert_output = self.experts[e](expert_input)
+            output_flat[positions] += w.unsqueeze(-1) * expert_output
+
+        # ── Stage 4: Reshape back ─────────────────────────────────────
+        output = output_flat.reshape(x.shape)
+        return output

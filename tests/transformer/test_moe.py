@@ -4,7 +4,7 @@ tests/transformer/test_moe.py — Tests for Mixture of Experts components.
 
 import pytest
 import torch
-from core.transformer.moe import MoERouter
+from core.transformer.moe import MoEFFN, MoERouter
 
 
 class TestMoERouter:
@@ -45,3 +45,124 @@ class TestMoERouter:
 
         assert torch.equal(i1, i2)
         assert torch.equal(w1, w2)
+
+
+class TestMoEFFN:
+    """Tests for the sparse MoE feedforward network."""
+
+    def test_construction(self):
+        """Should create correct number of experts with a router."""
+        d_model, d_ff, n_experts, k = 32, 128, 8, 2
+        moe = MoEFFN(d_model, d_ff, n_experts, k)
+
+        assert len(moe.experts) == n_experts
+        assert isinstance(moe.router, MoERouter)
+        assert moe.router.n_experts == n_experts
+        assert moe.router.k == k
+
+    def test_output_shape(self):
+        """Output should match input shape."""
+        batch, seq_len, d_model = 2, 8, 32
+        moe = MoEFFN(d_model, d_ff=128, n_experts=4, k=2)
+        x = torch.randn(batch, seq_len, d_model)
+        out = moe(x)
+        assert out.shape == (batch, seq_len, d_model)
+
+    def test_sparse_activation(self):
+        """Each token should activate exactly k experts.
+
+        The output from MoEFFN should be a weighted sum of exactly k
+        expert outputs, which means the router should assign each
+        token to exactly k distinct experts.
+        """
+        batch, seq_len, d_model = 2, 8, 16
+        n_experts, k = 8, 2
+        moe = MoEFFN(d_model, d_ff=64, n_experts=n_experts, k=k)
+        x = torch.randn(batch, seq_len, d_model)
+
+        weights, indices = moe.router(x)
+
+        # Each token has exactly k non-zero weights summing to 1
+        assert weights.shape == (batch, seq_len, k)
+        assert torch.allclose(weights.sum(dim=-1), torch.ones(batch, seq_len))
+
+        # Each token's k expert indices are distinct
+        for b in range(batch):
+            for t in range(seq_len):
+                assert len(set(indices[b, t].tolist())) == k, (
+                    f"token ({b},{t}) should have {k} distinct expert indices, "
+                    f"got {indices[b, t].tolist()}"
+                )
+
+    def test_gradient_flows(self):
+        """Gradients should flow through MoEFFN, including the router."""
+        d_model, d_ff = 16, 64
+        moe = MoEFFN(d_model, d_ff, n_experts=4, k=2)
+        x = torch.randn(1, 4, d_model, requires_grad=True)
+        out = moe(x)
+        loss = out.sum()
+        loss.backward()
+
+        assert x.grad is not None, "gradients should flow to input"
+        assert x.grad.abs().sum().item() > 0
+
+        # Router gate should have gradients (routing decisions are differentiable)
+        assert moe.router.gate.weight.grad is not None, (
+            "router gate should receive gradients"
+        )
+        assert moe.router.gate.weight.grad.abs().sum().item() > 0
+
+        # All experts should have gradients
+        for i, expert in enumerate(moe.experts):
+            for name, param in expert.named_parameters():
+                assert param.grad is not None, (
+                    f"gradient missing for expert {i}, param {name}"
+                )
+
+    def test_total_params_greater_than_active(self):
+        """Total params should exceed per-token active params (k << n_experts).
+
+        With 8 experts and k=2, total params is ~4x more than what
+        gets activated for any single token.
+        """
+        d_model, d_ff = 32, 128
+        n_experts, k = 8, 2
+        moe = MoEFFN(d_model, d_ff, n_experts=n_experts, k=k)
+
+        total = sum(p.numel() for p in moe.parameters())
+
+        # Each expert: w1 (d_model*d_ff) + bias1 (d_ff) + w2 (d_ff*d_model) + bias2 (d_model)
+        expert_params = d_model * d_ff + d_ff + d_ff * d_model + d_model
+        active = k * expert_params  # k=2 experts active per token
+
+        assert total > active, (
+            f"Total params ({total}) should exceed active ({active}) for sparsity"
+        )
+        # n_experts experts + router gate (d_model * n_experts, no bias)
+        expected_total = n_experts * expert_params + d_model * n_experts
+        assert total == expected_total, (
+            f"Total params mismatch: {total} vs {expected_total}"
+        )
+
+    def test_per_position_independence(self):
+        """Each position should be processed independently by MoEFFN.
+
+        Since experts are position-wise, modifying one token's input
+        should only affect that token's output.
+        """
+        batch, seq_len, d_model = 1, 4, 16
+        moe = MoEFFN(d_model, d_ff=64, n_experts=4, k=2)
+        x = torch.randn(batch, seq_len, d_model)
+        out_original = moe(x)
+
+        # Change only position 2
+        x_mod = x.clone()
+        x_mod[:, 2, :] = torch.randn(d_model)
+        out_mod = moe(x_mod)
+
+        for pos in [0, 1, 3]:
+            assert torch.allclose(
+                out_original[:, pos, :], out_mod[:, pos, :], atol=1e-6
+            ), f"position {pos} changed after modifying position 2"
+
+        assert not torch.allclose(out_original[:, 2, :], out_mod[:, 2, :], atol=1e-6)
