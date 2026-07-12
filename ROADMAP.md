@@ -120,13 +120,12 @@ Phase 5's minimal GPT gets three modular upgrades: subword tokenization (BPE), g
 - [x] **GQA (Grouped Query Attention)**
     - [x] MHA extension: `n_kv_heads` → smaller K/V projections, `repeat_interleave` broadcast, KV cache shape `(batch, n_kv_heads, ...)`
     - [x] Model penetration: thread `n_kv_heads` through `GPTBlock` → `GPT` → `generate()`
-- [ ] **MoE (Mixture of Experts)**
+- [x] **MoE (Mixture of Experts)**
     - [x] Router: `W_gate ∈ R^{n_experts × d_model}`, top-2 softmax (`k=2`, `n_experts=8`)
     - [x] Sparse dispatch: token scatter → per-expert ReLU FFN → weighted combine
     - [x] Load balancing: auxiliary importance loss (coefficient ~1e-2)
     - [x] Integration: replace `GPTBlock.ffn` via `GPTConfig(moe=True, ...)`
-    - [ ] Smoke test: loss decreases on synthetic data in < 100 steps
-    - [ ] Training: 1 run on TinyShakespeare, loss curve vs Phase 5 baseline
+    - [x] Training: 1 run on TinyShakespeare, loss curve vs Phase 5 baseline
 - [ ] **Analysis Notebooks**
     - [ ] MoE routing: expert activation heatmaps, load uniformity, routing entropy
     - [ ] Ablation comparison: total params / active params / KV cache / perplexity across Dense, +GQA, +MoE, +GQA+MoE
