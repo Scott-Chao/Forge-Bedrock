@@ -18,6 +18,7 @@ through a lightweight ``Tokenizer`` base class.
 from __future__ import annotations
 
 import re
+from collections import Counter
 
 import torch
 import torch.nn as nn
@@ -265,17 +266,16 @@ class BPETokenizer(Tokenizer):
         char_vocab = {c: i for i, c in enumerate(sorted(chars), start=start_id)}
         return char_vocab
 
-    def _get_pair_freqs(self, words: list[list[str]]) -> dict[tuple[str, str], int]:
-        """Count frequency of adjacent character pairs across all words.
+    def _get_pair_freqs(self, word_counts: Counter) -> dict[tuple[str, str], int]:
+        """Count frequency of adjacent character pairs, weighted by word counts.
 
-        For each word represented as a list of symbols (initially characters,
-        later also merged subwords), count how often each adjacent pair
-        ``(symbol[i], symbol[i+1])`` appears.
+        Uses a Counter of unique word tuples to avoid O(corpus_size) scans.
+        Each word's pair frequencies are multiplied by its occurrence count.
 
         Parameters
         ----------
-        words : list[list[str]]
-            Each word is a list of symbol strings (characters or subwords).
+        word_counts : Counter[tuple[str, ...]]
+            Maps each unique word (as a tuple of symbols) to its frequency.
 
         Returns
         -------
@@ -283,21 +283,23 @@ class BPETokenizer(Tokenizer):
             Pair-to-frequency mapping.
         """
         pair_freqs = {}
-        for word in words:
+        for word, count in word_counts.items():
             for a, b in zip(word, word[1:]):
                 key = (a, b)
-                pair_freqs[key] = pair_freqs.get(key, 0) + 1
+                pair_freqs[key] = pair_freqs.get(key, 0) + count
         return pair_freqs
 
     def _merge_pair(
-        self, words: list[list[str]], pair: tuple[str, str], replacement: str
-    ) -> list[list[str]]:
+        self, word_counts: Counter, pair: tuple[str, str], replacement: str
+    ) -> Counter:
         """Replace all occurrences of ``pair`` with ``replacement`` in every word.
+
+        Operates on unique words (Counter) and returns an updated Counter.
 
         Parameters
         ----------
-        words : list[list[str]]
-            Current state of the corpus (each word = list of symbols).
+        word_counts : Counter[tuple[str, ...]]
+            Unique words with their frequencies.
         pair : tuple[str, str]
             The pair ``(a, b)`` to merge.
         replacement : str
@@ -305,11 +307,11 @@ class BPETokenizer(Tokenizer):
 
         Returns
         -------
-        new_words : list[list[str]]
-            Corpus with the pair merged.
+        new_word_counts : Counter[tuple[str, ...]]
+            Updated word counts with the pair merged.
         """
-        new_words = []
-        for word in words:
+        new_counts: Counter = Counter()
+        for word, count in word_counts.items():
             new_word = []
             i = 0
             while i < len(word):
@@ -319,8 +321,8 @@ class BPETokenizer(Tokenizer):
                 else:
                     new_word.append(word[i])
                     i += 1
-            new_words.append(new_word)
-        return new_words
+            new_counts[tuple(new_word)] += count
+        return new_counts
 
     def train(self, texts: list[str]) -> None:
         """Learn BPE merge rules from a corpus.
@@ -332,18 +334,31 @@ class BPETokenizer(Tokenizer):
             4. Record each merge with its rank
             5. Build final vocabulary (base chars + merged tokens + special tokens)
 
-        Parameters
-        ----------
-        texts : list[str]
-            List of raw text strings (the training corpus).
+        Performance
+        -----------
+        Uses a Counter of unique words to avoid O(vocab_size × corpus) scans.
+        Most words in natural language repeat, so this is ~10-100× faster than
+        the naive per-token approach.
         """
-        words = [list(w) for t in texts for w in self._pre_tokenize(t)]
+        # Build unique-word counts from the corpus
+        raw_words: list[tuple[str, ...]] = []
+        for t in texts:
+            for w in self._pre_tokenize(t):
+                raw_words.append(tuple(w))
+        word_counts = Counter(raw_words)
+
+        # Initialise vocab with special tokens and base characters
+        words_as_lists = [list(w) for w in word_counts]
         self.vocab = {s: i for i, s in enumerate(self.special_tokens)}
-        self.vocab.update(self._get_char_vocab(words))
+        self.vocab.update(self._get_char_vocab(words_as_lists))
         self.id_to_token = {i: c for c, i in self.vocab.items()}
 
+        # Convert to tuple-based Counter for efficient weighted operations
+        # (each word is a tuple of symbols/chars)
+        word_counts = Counter({tuple(w): word_counts[tuple(w)] for w in words_as_lists})
+
         while len(self.vocab) < self._target_vocab_size:
-            pair_freqs = self._get_pair_freqs(words)
+            pair_freqs = self._get_pair_freqs(word_counts)
             if not pair_freqs:
                 break
 
@@ -352,7 +367,7 @@ class BPETokenizer(Tokenizer):
                 break
 
             merged = best_pair[0] + best_pair[1]
-            words = self._merge_pair(words, best_pair, merged)
+            word_counts = self._merge_pair(word_counts, best_pair, merged)
 
             next_id = len(self.vocab)
             self.merges[best_pair] = merged
@@ -388,8 +403,19 @@ class BPETokenizer(Tokenizer):
             if not candidates:
                 break
             best_pair = min(candidates, key=lambda p: self.merge_ranks[p])
+            merged = self.merges[best_pair]
 
-            symbols = self._merge_pair([symbols], best_pair, self.merges[best_pair])[0]
+            # Inline merge: build new symbol list, skipping the matched pair
+            new_symbols = []
+            i = 0
+            while i < len(symbols):
+                if i < len(symbols) - 1 and (symbols[i], symbols[i + 1]) == best_pair:
+                    new_symbols.append(merged)
+                    i += 2
+                else:
+                    new_symbols.append(symbols[i])
+                    i += 1
+            symbols = new_symbols
 
         return symbols
 

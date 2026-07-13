@@ -2,6 +2,8 @@
 tests/transformer/test_embedding.py — Tests for TokenEmbedding and CharTokenizer.
 """
 
+from collections import Counter
+
 import pytest
 import torch
 from core.transformer.embedding import (
@@ -283,9 +285,11 @@ class TestBPETokenizer:
         ],
     )
     def test_get_pair_freqs(self, words, expected_pairs):
-        """_get_pair_freqs should count adjacent pairs correctly."""
+        """_get_pair_freqs should count adjacent pairs weighted by word counts."""
         tok = BPETokenizer()
-        assert tok._get_pair_freqs(words) == expected_pairs
+        # Convert list-of-lists to Counter of tuples (as done during training)
+        word_counts = Counter(tuple(w) for w in words)
+        assert tok._get_pair_freqs(word_counts) == expected_pairs
 
     # ------------------------------------------------------------------
     # Merge pair
@@ -294,23 +298,24 @@ class TestBPETokenizer:
     def test_merge_pair_basic(self):
         """_merge_pair should replace all non-overlapping occurrences."""
         tok = BPETokenizer()
-        words = [["a", "b", "c"], ["a", "b", "a", "b"]]
-        result = tok._merge_pair(words, ("a", "b"), "ab")
-        assert result == [["ab", "c"], ["ab", "ab"]]
+        word_counts = Counter({("a", "b", "c"): 1, ("a", "b", "a", "b"): 2})
+        result = tok._merge_pair(word_counts, ("a", "b"), "ab")
+        assert result[("ab", "c")] == 1
+        assert result[("ab", "ab")] == 2
 
     def test_merge_pair_overlap(self):
         """Overlapping pairs should not be double-merged."""
         tok = BPETokenizer()
-        words = [["a", "a", "a"]]
-        result = tok._merge_pair(words, ("a", "a"), "aa")
-        assert result == [["aa", "a"]]
+        word_counts = Counter({("a", "a", "a"): 1})
+        result = tok._merge_pair(word_counts, ("a", "a"), "aa")
+        assert result == Counter({("aa", "a"): 1})
 
     def test_merge_pair_no_match(self):
         """When no pair matches, words should be unchanged."""
         tok = BPETokenizer()
-        words = [["x", "y", "z"]]
-        result = tok._merge_pair(words, ("a", "b"), "ab")
-        assert result == [["x", "y", "z"]]
+        word_counts = Counter({("x", "y", "z"): 1})
+        result = tok._merge_pair(word_counts, ("a", "b"), "ab")
+        assert result == word_counts
 
     # ------------------------------------------------------------------
     # Full training pipeline
