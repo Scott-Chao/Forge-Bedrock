@@ -18,6 +18,7 @@ through a lightweight ``Tokenizer`` base class.
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections import Counter
 
 import torch
@@ -46,6 +47,39 @@ def _build_default_vocab() -> dict[str, int]:
     )
     all_tokens = special_tokens + list(chars)
     return {token: i for i, token in enumerate(all_tokens)}
+
+
+# Mapping of rarely-occurring Unicode characters to ASCII equivalents.
+# Only characters that appear fewer than ``min_char_freq`` times in the
+# corpus (and would otherwise be dropped by the frequency filter) need
+# mapping. Common Unicode punctuation (em-dash, curly quotes, etc.)
+# stays in the vocabulary as independent tokens.
+_INVISIBLE_CHARS = {
+    "\xa0": " ",  # NO-BREAK SPACE
+    "​": "",  # ZERO-WIDTH SPACE
+    "﻿": "",  # BOM / ZWNBSP
+}
+_RARE_PUNCT_MAP = {
+    # Rare dashes
+    "―": "-",  # HORIZONTAL BAR
+    "‑": "-",  # NON-BREAKING HYPHEN
+    # Rare quotes (single/double low, guillemets)
+    "‚": "'",  # SINGLE LOW-9 QUOTATION MARK
+    "‛": "'",  # SINGLE HIGH-REVERSED-9 QUOTATION MARK
+    "‟": '"',  # DOUBLE HIGH-REVERSED-9 QUOTATION MARK
+    "«": '"',  # LEFT-POINTING DOUBLE ANGLE QUOTATION MARK
+    "»": '"',  # RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK
+    "‹": "'",  # SINGLE LEFT-POINTING ANGLE QUOTATION MARK
+    "›": "'",  # SINGLE RIGHT-POINTING ANGLE QUOTATION MARK
+    "″": '"',  # DOUBLE PRIME
+    # Rare typographic symbols
+    "…": "...",  # HORIZONTAL ELLIPSIS
+    "•": "-",  # BULLET
+    "·": "-",  # MIDDLE DOT
+    "№": "No",  # NUMERO SIGN
+    "©": "(c)",  # COPYRIGHT
+    "®": "(r)",  # REGISTERED
+}
 
 
 class Tokenizer:
@@ -193,16 +227,20 @@ class BPETokenizer(Tokenizer):
 
     Parameters
     ----------
-    vocab_size : int, optional (default=256)
+    vocab_size : int, optional (default=2048)
         Target vocabulary size including base characters and special tokens.
-        Must be > len(base_characters) + len(special_tokens).
     special_tokens : list[str] | None, optional
         Special tokens like ``["<PAD>", "<UNK>", "<BOS>", "<EOS>"]``.
         These occupy the first N IDs in the vocabulary.
-    regex_pattern : str, optional (default=r'\\w+|\\s+|[^\\w\\s]')
+    regex_pattern : str, optional
         Regex pattern for pre-tokenization. The default matches word
         characters, whitespace, and individual punctuation as separate
-        pre-tokens, preserving formatting for encode/decode roundtrips.
+        pre-tokens.
+    min_char_freq : int, optional (default=5)
+        Minimum corpus frequency for a non-ASCII character to be included
+        as a base vocabulary character. ASCII characters are always kept.
+        Raising this frees more vocab slots for BPE merges at the cost of
+        a tiny increase in ``<UNK>`` tokens.
 
     Attributes
     ----------
@@ -214,13 +252,15 @@ class BPETokenizer(Tokenizer):
 
     def __init__(
         self,
-        vocab_size: int = 256,
+        vocab_size: int = 2048,
         special_tokens: list[str] | None = None,
         regex_pattern: str = r"\w+|\s+|[^\w\s]",
+        min_char_freq: int = 5,
     ):
         super().__init__(special_tokens)
         self._target_vocab_size = vocab_size
         self.regex_pattern = regex_pattern
+        self._min_char_freq = min_char_freq
         self.merges: dict[tuple[str, str], str] = {}
         self.merge_ranks: dict[tuple[str, str], int] = {}
 
@@ -244,27 +284,29 @@ class BPETokenizer(Tokenizer):
         """
         return re.findall(self.regex_pattern, text)
 
-    def _get_char_vocab(self, words: list[list[str]]) -> dict[str, int]:
-        """Build initial character-level vocabulary from pre-tokenized words.
+    @staticmethod
+    def _normalize(text: str) -> str:
+        """Normalize text for consistent train/encode behavior.
 
-        Each word (already split into characters) supplies its individual
-        characters. Each unique character gets a unique token ID starting
-        after the special tokens.
+        Pipeline:
+            1. Strip invisible characters (BOM, ZWSP, NBSP → space)
+            2. Map very rare Unicode punctuation to ASCII equivalents
+               (guillemets, rare quotes, typographic symbols)
+            3. NFKD decompose then strip combining marks (accents off)
+            4. NFKC recompose for canonical form
 
-        Parameters
-        ----------
-        words : list[list[str]]
-            Each element is a word represented as a list of characters.
-
-        Returns
-        -------
-        char_vocab : dict[str, int]
-            Character-to-ID mapping.
+        Keeps common Unicode punctuation (em-dash, curly quotes, etc.)
+        as independent tokens since they pass the frequency threshold.
         """
-        chars = {c for word in words for c in word}
-        start_id = len(self.special_tokens)
-        char_vocab = {c: i for i, c in enumerate(sorted(chars), start=start_id)}
-        return char_vocab
+        for k, v in _INVISIBLE_CHARS.items():
+            text = text.replace(k, v)
+        for k, v in _RARE_PUNCT_MAP.items():
+            text = text.replace(k, v)
+        nfkd = unicodedata.normalize("NFKD", text)
+        no_accents = "".join(
+            c for c in nfkd if unicodedata.category(c) not in ("Mn", "Mc")
+        )
+        return unicodedata.normalize("NFKC", no_accents)
 
     def _get_pair_freqs(self, word_counts: Counter) -> dict[tuple[str, str], int]:
         """Count frequency of adjacent character pairs, weighted by word counts.
@@ -324,39 +366,81 @@ class BPETokenizer(Tokenizer):
             new_counts[tuple(new_word)] += count
         return new_counts
 
+    def _build_base_vocab(self, word_counts: Counter) -> None:
+        """Build base character vocabulary from corpus frequencies.
+
+        ASCII characters are always kept. Non-ASCII characters appearing
+        fewer than ``min_char_freq`` times are excluded so that BPE merge
+        slots aren't wasted on corpus-specific rarities.
+        """
+        char_freqs: Counter = Counter()
+        for word, count in word_counts.items():
+            for c in word:
+                char_freqs[c] += count
+
+        base_chars = sorted(
+            c
+            for c in char_freqs
+            if ord(c) < 128 or char_freqs[c] >= self._min_char_freq
+        )
+        self.vocab = {s: i for i, s in enumerate(self.special_tokens)}
+        self.vocab.update(
+            {c: i for i, c in enumerate(base_chars, start=len(self.special_tokens))}
+        )
+        self.id_to_token = {i: c for c, i in self.vocab.items()}
+
+    @staticmethod
+    def _filter_word_counts(word_counts: Counter, kept_chars: set[str]) -> Counter:
+        """Drop characters not in ``kept_chars`` from all words.
+
+        Weighted frequencies are preserved so rare words don't get inflated.
+        """
+        filtered = Counter()
+        for word, count in word_counts.items():
+            cleaned = tuple(c for c in word if c in kept_chars)
+            if cleaned:
+                filtered[cleaned] += count
+        return filtered
+
     def train(self, texts: list[str]) -> None:
         """Learn BPE merge rules from a corpus.
 
         Pipeline:
-            1. Pre-tokenize each text into words
-            2. Split each word into characters (initial vocabulary)
-            3. Iteratively find and merge the most frequent adjacent pair
-            4. Record each merge with its rank
-            5. Build final vocabulary (base chars + merged tokens + special tokens)
+            1. Normalise each text (punctuation mapping → accent stripping)
+            2. Pre-tokenize into words and build frequency tables
+            3. Build base character vocabulary, dropping non-ASCII characters
+               below ``min_char_freq``
+            4. Iteratively find and merge the most frequent adjacent pair
+            5. Record each merge with its rank
 
         Performance
         -----------
         Uses a Counter of unique words to avoid O(vocab_size × corpus) scans.
         Most words in natural language repeat, so this is ~10-100× faster than
         the naive per-token approach.
+
+        Notes
+        -----
+        Normalization is applied at the start so that BPE merges are learned
+        on the same character distribution that ``encode`` will see.
         """
-        # Build unique-word counts from the corpus
-        raw_words: list[tuple[str, ...]] = []
+        # 1. Normalize all texts
+        texts = [self._normalize(t) for t in texts]
+
+        # 2. Pre-tokenize and build unique-word counts (weighted)
+        word_counts: Counter = Counter()
         for t in texts:
             for w in self._pre_tokenize(t):
-                raw_words.append(tuple(w))
-        word_counts = Counter(raw_words)
+                word_counts[tuple(w)] += 1
 
-        # Initialise vocab with special tokens and base characters
-        words_as_lists = [list(w) for w in word_counts]
-        self.vocab = {s: i for i, s in enumerate(self.special_tokens)}
-        self.vocab.update(self._get_char_vocab(words_as_lists))
-        self.id_to_token = {i: c for c, i in self.vocab.items()}
+        # 3. Build base character vocabulary (filters rare non-ASCII)
+        self._build_base_vocab(word_counts)
 
-        # Convert to tuple-based Counter for efficient weighted operations
-        # (each word is a tuple of symbols/chars)
-        word_counts = Counter({tuple(w): word_counts[tuple(w)] for w in words_as_lists})
+        # Strip chars that didn't make the cut from word_counts
+        kept_chars = set(self.vocab)
+        word_counts = self._filter_word_counts(word_counts, kept_chars)
 
+        # 4. BPE merge loop
         while len(self.vocab) < self._target_vocab_size:
             pair_freqs = self._get_pair_freqs(word_counts)
             if not pair_freqs:
@@ -423,14 +507,16 @@ class BPETokenizer(Tokenizer):
         """Convert a text string to a list of token IDs.
 
         Pipeline:
-            1. Pre-tokenize the text into words
-            2. For each word, apply learned merges via ``_encode_word``
-            3. Convert subword tokens to token IDs via ``self.vocab``
+            1. Normalize input text (matches training-time preprocessing)
+            2. Pre-tokenize the text into words
+            3. For each word, apply learned merges via ``_encode_word``
+            4. Convert subword tokens to token IDs via ``self.vocab``
 
         Parameters
         ----------
         text : str
-            Raw input text.
+            Raw input text. Will be normalized the same way as the training
+            corpus (punctuation mapping + accent stripping) before encoding.
         **kwargs
             Ignored extra keyword arguments for API compatibility with
             ``CharLevelDataset`` (which passes ``add_special_tokens=False``).
@@ -438,8 +524,11 @@ class BPETokenizer(Tokenizer):
         Returns
         -------
         ids : list[int]
-            Sequence of integer token IDs.
+            Sequence of integer token IDs. Characters that were filtered out
+            during training (very rare non-ASCII) become ``<UNK>``.
         """
+        text = self._normalize(text)
+
         words = self._pre_tokenize(text)
         unk_id = self.vocab.get("<UNK>")
         ids = []

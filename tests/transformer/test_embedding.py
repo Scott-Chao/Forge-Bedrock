@@ -257,19 +257,30 @@ class TestBPETokenizer:
     # Character vocabulary
     # ------------------------------------------------------------------
 
-    def test_get_char_vocab_simple(self):
-        """_get_char_vocab should collect unique chars with IDs after special."""
+    def test_build_base_vocab(self):
+        """_build_base_vocab should populate vocab with base chars + special tokens."""
         tok = BPETokenizer(special_tokens=["<PAD>", "<UNK>"])
-        words = ["hello", "world"]
-        vocab = tok._get_char_vocab(words)
+        word_counts = Counter(
+            [
+                ("h", "e", "l", "l", "o"),
+                ("w", "o", "r", "l", "d"),
+            ]
+        )
+        tok._build_base_vocab(word_counts)
         # sorted(chars) = ['d','e','h','l','o','r','w'] → IDs start at 2
-        assert vocab["d"] == 2
-        assert vocab["e"] == 3
-        assert vocab["h"] == 4
-        assert set(vocab.keys()) == {"h", "e", "l", "o", "w", "r", "d"}
-        # Special tokens should NOT be in char vocab
-        assert "<PAD>" not in vocab
-        assert "<UNK>" not in vocab
+        assert tok.vocab["<PAD>"] == 0
+        assert tok.vocab["<UNK>"] == 1
+        assert tok.vocab["d"] == 2
+        assert tok.vocab["e"] == 3
+        assert tok.vocab["h"] == 4
+        assert tok.vocab["l"] == 5
+        assert tok.vocab["o"] == 6
+        assert tok.vocab["r"] == 7
+        assert tok.vocab["w"] == 8
+        assert len(tok.vocab) == 9  # 2 special + 7 chars
+        # id_to_token round-trip
+        for c, i in tok.vocab.items():
+            assert tok.id_to_token[i] == c
 
     # ------------------------------------------------------------------
     # Pair frequency
