@@ -126,6 +126,5 @@ Phase 5's minimal GPT gets three modular upgrades: subword tokenization (BPE), g
     - [x] Load balancing: auxiliary importance loss (coefficient ~1e-2)
     - [x] Integration: replace `GPTBlock.ffn` via `GPTConfig(moe=True, ...)`
     - [x] Training: 1 run on TinyShakespeare, loss curve vs Phase 5 baseline
-- [ ] **Analysis Notebooks**
-    - [ ] MoE routing: expert activation heatmaps, load uniformity, routing entropy
-    - [ ] Ablation comparison: total params / active params / KV cache / perplexity across Dense, +GQA, +MoE, +GQA+MoE
+- [x] **Analysis Notebooks**
+    - [x] MoE routing: expert activation heatmaps, load uniformity, routing entropy
