@@ -30,18 +30,18 @@ forge-bedrock/
 │   ├── distributions.py   # Theoretical distributions (Uniform, Bernoulli, Categorical, Normal)
 │   ├── info_theory.py     # Entropy, KL Divergence, Cross-Entropy
 │   └── bias_variance.py   # Bias-variance decomposition simulation
-├── core/transformer/      # Decoder-only Transformer (GPT) on PyTorch (Phase 5)
-│   ├── transformer.py     # All Transformer-specific components in one file:
-│   │                      #   scaled_dot_product_attention + MultiHeadAttention
-│   │                      #   RoPE (precompute_freqs_cis, apply_rotary_emb, RotaryEmbedding)
-│   │                      #   FeedForward (d_model → d_ff → d_model, d_ff = 4×d_model)
-│   │                      #   GPTBlock (RMSNorm → Attn → RMSNorm → FFN, Pre-Norm residual)
-│   │                      #   GPT (TokenEmbed → N×GPTBlock → RMSNorm → lm_head → logits)
-│   ├── normalization.py   # RMSNorm: γ ⊙ x / √(mean(x²) + ε) — follows nn.modules.normalization
-│   ├── data.py            # Char-level corpus loading + CharLevelDataset + DataLoader builder
-│   ├── embedding.py       # CharTokenizer (vocab ~70) + TokenEmbedding lookup
-│   ├── kv_cache.py        # O(n²) → O(n) decode: KVCache
-│   └── sampling.py        # Token sampling: argmax → Temperature → Top-k → Top-p (nucleus)
+├── core/transformer/      # Decoder-only Transformer (GPT) on PyTorch (Phase 5–6)
+│   ├── transformer.py     # GPTBlock (Pre-Norm: RMSNorm → Attn → RMSNorm → FF) + GPT
+│   ├── attention.py       # scaled_dot_product_attention + MultiHeadAttention / GQA
+│   ├── feedforward.py     # Position-wise FFN: Linear(d_model → d_ff → d_model) + ReLU
+│   ├── rope.py            # RoPE: precompute_freqs_cis, apply_rotary_emb, RotaryEmbedding
+│   ├── normalization.py   # RMSNorm: γ ⊙ x / √(mean(x²) + ε)
+│   ├── moe.py             # MoERouter (top-k gate) + MoEFFN (sparse expert mixture)
+│   ├── data.py            # Corpus loading + CharLevelDataset + DataLoader builder
+│   ├── embedding.py       # CharTokenizer + BPETokenizer (BPE, save/load) + TokenEmbedding
+│   ├── kv_cache.py        # O(n²) → O(n) decode via cached K, V tensors
+│   ├── sampling.py        # Token sampling: argmax → temperature → top-k → top-p (nucleus)
+│   └── checkpoint.py      # load_checkpoint: restore trained GPT + tokenizer from disk
 ├── apps/                  # Application Jupyter Notebooks
 │   ├── image_compression.ipynb        # SVD-based low-rank image compression
 │   ├── least_squares_regression.ipynb # Normal Equation vs Pseudoinverse
@@ -56,14 +56,12 @@ forge-bedrock/
 │   ├── train_gpt.ipynb                 # Full training pipeline on TinyShakespeare
 │   ├── analysis_attention_rope.ipynb   # Attention pattern heatmaps + RoPE visualisation
 │   └── analysis_sampling.ipynb         # Temperature, Top-k, Top-p comparison
-│
 ├── tests/                 # pytest tests mirroring core/ structure
 │   ├── linalg/            # Tests for Phase 1 (matrix, eigen, solver, SVD)
 │   ├── autograd/          # Tests for Phase 2 (value, functional with finite differences)
 │   ├── nn/                # Tests for Phase 2–4 (all layers, losses, optimisers, schedulers)
 │   ├── prob/              # Tests for Phase 3 (distributions, info theory)
 │   └── transformer/       # Tests for Phase 5 (transformer, normalization, sampling, generation)
-│
 ├── assets/                # Static resources (images, etc.)
 └── environment.yml        # conda environment
 ```
