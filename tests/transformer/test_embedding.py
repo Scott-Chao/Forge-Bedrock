@@ -11,6 +11,7 @@ from core.transformer.embedding import (
     CharTokenizer,
     TokenEmbedding,
     _build_default_vocab,
+    pre_tokenize,
 )
 
 
@@ -251,7 +252,7 @@ class TestBPETokenizer:
     def test_pre_tokenize(self, text, expected):
         """_pre_tokenize should split text by \\w+, \\s+, and individual [^\\w\\s]."""
         tok = BPETokenizer()
-        assert tok._pre_tokenize(text) == expected
+        assert pre_tokenize(text, tok.regex_pattern) == expected
 
     # ------------------------------------------------------------------
     # Character vocabulary
@@ -490,6 +491,6 @@ class TestBPETokenizer:
         decoded = trained_tok.decode(ids)
         # The training vocab only contains {e,l,n,o,w,space} and learned merges,
         # so these test strings should roundtrip losslessly.
-        words = trained_tok._pre_tokenize(text)
+        words = pre_tokenize(text, trained_tok.regex_pattern)
         expected = "".join(words)
         assert decoded == expected

@@ -4,7 +4,7 @@ tests/transformer/test_block.py — Tests for GPTBlock.
 
 import pytest
 import torch
-from core.transformer.transformer import GPTBlock
+from core.transformer.transformer import GPTBlock, _create_causal_mask
 
 
 class TestGPTBlock:
@@ -86,7 +86,7 @@ class TestGPTBlock:
         # Even with random init, the first position should not depend
         # on the last position.
 
-        mask = small_block._create_attn_mask(seq_len)
+        mask = _create_causal_mask(seq_len)
         out_full, _ = small_block(x, mask=mask)
 
         # Zero out the last token and recompute
@@ -124,7 +124,7 @@ class TestGPTBlock:
     def test_forward_with_explicit_mask(self, small_block, sample_input):
         """Should accept an explicit mask argument."""
         seq_len = sample_input.size(1)
-        mask = small_block._create_attn_mask(seq_len)
+        mask = _create_causal_mask(seq_len)
         out, _ = small_block(sample_input, mask=mask)
         assert out.shape == sample_input.shape
 
@@ -142,9 +142,9 @@ class TestGPTBlock:
             )
 
     def test_causal_mask_factory(self, small_block):
-        """_create_attn_mask should return a valid causal mask."""
+        """_create_causal_mask should return a valid causal mask."""
         seq_len = 8
-        mask = small_block._create_attn_mask(seq_len)
+        mask = _create_causal_mask(seq_len)
         assert mask.shape == (seq_len, seq_len)
         assert mask.dtype == torch.bool
         # Lower triangle (including diagonal) should be True

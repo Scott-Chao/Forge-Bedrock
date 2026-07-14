@@ -23,7 +23,7 @@ class TestMoERouter:
         """Core contract: correct shapes, weights sum to 1, indices in range."""
         router = MoERouter(d_model=8, n_experts=n_experts, k=k)
         x = torch.randn(batch, seq_len, 8)
-        weights, indices = router(x)
+        weights, indices, _ = router(x)
 
         assert weights.shape == (batch, seq_len, k)
         assert weights.dtype == torch.float32
@@ -40,8 +40,8 @@ class TestMoERouter:
         """Same input always produces the same routing."""
         router = MoERouter(d_model=8, n_experts=4, k=2)
         x = torch.randn(2, 5, 8)
-        w1, i1 = router(x)
-        w2, i2 = router(x)
+        w1, i1, _ = router(x)
+        w2, i2, _ = router(x)
 
         assert torch.equal(i1, i2)
         assert torch.equal(w1, w2)
@@ -83,7 +83,7 @@ class TestMoEFFN:
         moe = MoEFFN(d_model, d_ff=64, n_experts=n_experts, k=k)
         x = torch.randn(batch, seq_len, d_model)
 
-        weights, indices = moe.router(x)
+        weights, indices, _ = moe.router(x)
 
         # Each token has exactly k non-zero weights summing to 1
         assert weights.shape == (batch, seq_len, k)

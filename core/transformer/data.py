@@ -1,10 +1,14 @@
 """
-core/transformer/data.py — Corpus loading and dataset for char-level language modeling.
+core/transformer/data.py — Corpus loading and dataset for language modeling.
 
-This module provides the data pipeline for training a char-level GPT:
+Provides the data pipeline for training a decoder-only GPT:
 
-    raw_text → [CharTokenizer] → 1D integer array → [CharLevelDataset]
+    raw_text → [tokenizer] → 1D integer array → [CharLevelDataset]
     → (input_ids, target_ids) pairs → [DataLoader] → batched training
+
+Works with any tokenizer that provides ``encode()`` / ``decode()``
+(character-level, BPE, etc.). See ``core.transformer.embedding`` for
+available tokenizer implementations.
 
 Self-supervised formulation
 ---------------------------
@@ -27,6 +31,10 @@ text8 (~100 MB)
     - Wikipedia dump, lowercase a-z + space only
     - 27 unique characters → vocab_size = 27
     - Not used by default; can be swapped in.
+
+WikiText-2 (~2.5M tokens)
+    - Wikipedia articles, suitable for subword (BPE) tokenization
+    - Used by the ``train_gpt.ipynb`` notebook
 """
 
 from __future__ import annotations
@@ -95,8 +103,9 @@ class CharLevelDataset(Dataset):
     ----------
     text : str
         Full corpus as a single string.
-    tokenizer : CharTokenizer
-        Character-level tokenizer with encode() / decode().
+    tokenizer : Tokenizer
+        A tokenizer with ``encode()`` / ``decode()`` methods (e.g.
+        ``CharTokenizer`` or ``BPETokenizer``).
     block_size : int, optional (default=128)
         Context length (T). Each sample has shape (T,) for input and (T,) for target.
     device : torch.device | str | None, optional (default=None)
@@ -153,8 +162,8 @@ def create_dataloaders(
     ----------
     corpus_name : str, optional (default="tinyshakespeare")
         Key in CORPUS_SOURCES.
-    tokenizer : CharTokenizer | None, optional
-        If None, a CharTokenizer is built from the text by scanning
+    tokenizer : Tokenizer | None, optional
+        If None, a ``CharTokenizer`` is built from the text by scanning
         all unique characters.
     block_size : int, optional (default=128)
         Context length.

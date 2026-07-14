@@ -17,7 +17,7 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from core.transformer.transformer import FeedForward
+from core.transformer.feedforward import FeedForward
 
 
 class MoERouter(nn.Module):
@@ -51,7 +51,9 @@ class MoERouter(nn.Module):
         self.k = k
         self.gate = nn.Linear(d_model, n_experts, bias=False)
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Route each token to its top-k experts.
 
         Parameters
@@ -61,7 +63,7 @@ class MoERouter(nn.Module):
 
         Returns
         -------
-        (weights, indices) : tuple[torch.Tensor, torch.Tensor]
+        (weights, indices, logits) : tuple[torch.Tensor, torch.Tensor, torch.Tensor]
 
             weights : (batch_size, seq_len, k)
                 Softmax-normalised weights for each selected expert.
@@ -70,11 +72,16 @@ class MoERouter(nn.Module):
 
             indices : (batch_size, seq_len, k), dtype=torch.long
                 Indices of the selected experts in ``[0, n_experts)``.
+
+            logits : (batch_size, seq_len, n_experts)
+                Raw gate logits for every expert (pre-topk). Used by
+                MoEFFN to compute the auxiliary load-balancing loss
+                without a redundant forward pass through the gate.
         """
         logits = self.gate(x)
         weights, indices = torch.topk(logits, self.k, dim=-1)
         weights = F.softmax(weights, dim=-1)
-        return weights, indices
+        return weights, indices, logits
 
 
 class MoEFFN(nn.Module):
@@ -83,13 +90,18 @@ class MoEFFN(nn.Module):
     Replaces a standard dense FFN with a sparse MoE layer:
 
         1. Router selects top-k experts for each token
+           (returns weights, indices, and raw logits for aux loss)
         2. Tokens are dispatched to their assigned experts
         3. Each expert (a ReLU FFN) processes its tokens
         4. Outputs are weighted-combined using routing weights
 
     An **auxiliary load-balancing loss** is computed during forward and
-    returned alongside the output. This loss encourages the router to
-    distribute tokens uniformly across experts.
+    stored in ``self._aux_loss`` (accessible via the ``aux_loss`` property).
+    This loss encourages the router to distribute tokens uniformly across
+    experts.
+
+    The coefficient for the auxiliary loss is applied externally in the
+    training loop (typically 1e-3 ~ 1e-2).
 
     Parameters
     ----------
@@ -104,9 +116,6 @@ class MoEFFN(nn.Module):
         Must be <= n_experts.
     bias : bool, optional (default=True)
         Whether to use bias in the expert linear projections.
-    aux_loss_coef : float, optional (default=1e-2)
-        Coefficient scaling the auxiliary load-balancing loss.
-        Typical range: 1e-3 ~ 1e-2.
     """
 
     def __init__(
@@ -116,7 +125,6 @@ class MoEFFN(nn.Module):
         n_experts: int = 8,
         k: int = 2,
         bias: bool = True,
-        aux_loss_coef: float = 1e-2,
     ):
         super().__init__()
 
@@ -124,7 +132,6 @@ class MoEFFN(nn.Module):
         self.d_ff = d_ff
         self.n_experts = n_experts
         self.k = k
-        self.aux_loss_coef = aux_loss_coef
 
         self.router = MoERouter(d_model, n_experts, k)
 
@@ -149,7 +156,7 @@ class MoEFFN(nn.Module):
             Weighted combination of expert outputs.
         """
         # ── Stage 1: Route ─────────────────────────────────────────────
-        weights, indices = self.router(x)
+        weights, indices, logits = self.router(x)
 
         # ── Stage 2: Flatten batch & seq into a single token dimension ─
         x_flat = x.reshape(-1, self.d_model)
@@ -171,7 +178,6 @@ class MoEFFN(nn.Module):
         output = output_flat.reshape(x.shape)
 
         # ── Auxiliary Load-Balancing Loss ──────────────────────────────
-        logits = self.router.gate(x)
         full_probs = F.softmax(logits, dim=-1)
 
         T = x.size(0) * x.size(1)

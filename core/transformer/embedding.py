@@ -17,6 +17,7 @@ through a lightweight ``Tokenizer`` base class.
 
 from __future__ import annotations
 
+import os
 import re
 import unicodedata
 from collections import Counter
@@ -80,6 +81,69 @@ _RARE_PUNCT_MAP = {
     "©": "(c)",  # COPYRIGHT
     "®": "(r)",  # REGISTERED
 }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Text processing utilities (used by BPETokenizer)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def normalize_text(text: str) -> str:
+    """Normalize text for consistent tokenizer train/encode behavior.
+
+    Pipeline:
+        1. Strip invisible characters (BOM, ZWSP, NBSP → space)
+        2. Map very rare Unicode punctuation to ASCII equivalents
+           (guillemets, rare quotes, typographic symbols)
+        3. NFKD decompose then strip combining marks (accents off)
+        4. NFKC recompose for canonical form
+
+    Keeps common Unicode punctuation (em-dash, curly quotes, etc.)
+    as independent tokens since they pass the frequency threshold.
+    """
+    for k, v in _INVISIBLE_CHARS.items():
+        text = text.replace(k, v)
+    for k, v in _RARE_PUNCT_MAP.items():
+        text = text.replace(k, v)
+    nfkd = unicodedata.normalize("NFKD", text)
+    no_accents = "".join(c for c in nfkd if unicodedata.category(c) not in ("Mn", "Mc"))
+    return unicodedata.normalize("NFKC", no_accents)
+
+
+def pre_tokenize(text: str, pattern: str = r"\w+|\s+|[^\w\s]") -> list[str]:
+    """Split raw text into pre-token "words" for BPE training / encoding.
+
+    The default regex ``\\w+|\\s+|[^\\w\\s]`` matches word characters,
+    whitespace, and individual punctuation symbols as separate pre-tokens.
+    Whitespace and punctuation are preserved so that
+    ``decode(encode(text))`` can recover original formatting.
+
+    Parameters
+    ----------
+    text : str
+        Raw input text (e.g., ``"Hello, world!"``).
+    pattern : str, optional
+        Regex pattern for splitting.
+
+    Returns
+    -------
+    words : list[str]
+        List of pre-tokenized words (e.g., ``["Hello", "world"]``).
+    """
+    return re.findall(pattern, text)
+
+
+def _filter_word_counts(word_counts: Counter, kept_chars: set[str]) -> Counter:
+    """Drop characters not in ``kept_chars`` from all words.
+
+    Weighted frequencies are preserved so rare words don't get inflated.
+    """
+    filtered = Counter()
+    for word, count in word_counts.items():
+        cleaned = tuple(c for c in word if c in kept_chars)
+        if cleaned:
+            filtered[cleaned] += count
+    return filtered
 
 
 class Tokenizer:
@@ -179,22 +243,6 @@ class CharTokenizer(Tokenizer):
         self.vocab = vocab
         self.id_to_token = {i: c for c, i in vocab.items()}
 
-    @property
-    def pad_id(self) -> int:
-        return self.vocab.get("<PAD>", 0)
-
-    @property
-    def unk_id(self) -> int:
-        return self.vocab.get("<UNK>", 1)
-
-    @property
-    def bos_id(self) -> int:
-        return self.vocab.get("<BOS>", 2)
-
-    @property
-    def eos_id(self) -> int:
-        return self.vocab.get("<EOS>", 3)
-
     def encode(self, text: str, add_special_tokens: bool = True) -> list[int]:
         """Convert a text string to a list of token IDs.
 
@@ -263,50 +311,6 @@ class BPETokenizer(Tokenizer):
         self._min_char_freq = min_char_freq
         self.merges: dict[tuple[str, str], str] = {}
         self.merge_ranks: dict[tuple[str, str], int] = {}
-
-    def _pre_tokenize(self, text: str) -> list[str]:
-        """Split raw text into pre-token "words".
-
-        The default regex ``r'\\w+|\\s+|[^\\w\\s]'`` matches word characters,
-        whitespace, and individual punctuation symbols as separate pre-tokens.
-        Whitespace and punctuation are preserved so that
-        ``decode(encode(text))`` can recover original formatting.
-
-        Parameters
-        ----------
-        text : str
-            Raw input text (e.g., ``"Hello, world!"``).
-
-        Returns
-        -------
-        words : list[str]
-            List of pre-tokenized words (e.g., ``["Hello", "world"]``).
-        """
-        return re.findall(self.regex_pattern, text)
-
-    @staticmethod
-    def _normalize(text: str) -> str:
-        """Normalize text for consistent train/encode behavior.
-
-        Pipeline:
-            1. Strip invisible characters (BOM, ZWSP, NBSP → space)
-            2. Map very rare Unicode punctuation to ASCII equivalents
-               (guillemets, rare quotes, typographic symbols)
-            3. NFKD decompose then strip combining marks (accents off)
-            4. NFKC recompose for canonical form
-
-        Keeps common Unicode punctuation (em-dash, curly quotes, etc.)
-        as independent tokens since they pass the frequency threshold.
-        """
-        for k, v in _INVISIBLE_CHARS.items():
-            text = text.replace(k, v)
-        for k, v in _RARE_PUNCT_MAP.items():
-            text = text.replace(k, v)
-        nfkd = unicodedata.normalize("NFKD", text)
-        no_accents = "".join(
-            c for c in nfkd if unicodedata.category(c) not in ("Mn", "Mc")
-        )
-        return unicodedata.normalize("NFKC", no_accents)
 
     def _get_pair_freqs(self, word_counts: Counter) -> dict[tuple[str, str], int]:
         """Count frequency of adjacent character pairs, weighted by word counts.
@@ -389,19 +393,6 @@ class BPETokenizer(Tokenizer):
         )
         self.id_to_token = {i: c for c, i in self.vocab.items()}
 
-    @staticmethod
-    def _filter_word_counts(word_counts: Counter, kept_chars: set[str]) -> Counter:
-        """Drop characters not in ``kept_chars`` from all words.
-
-        Weighted frequencies are preserved so rare words don't get inflated.
-        """
-        filtered = Counter()
-        for word, count in word_counts.items():
-            cleaned = tuple(c for c in word if c in kept_chars)
-            if cleaned:
-                filtered[cleaned] += count
-        return filtered
-
     def train(self, texts: list[str]) -> None:
         """Learn BPE merge rules from a corpus.
 
@@ -425,12 +416,12 @@ class BPETokenizer(Tokenizer):
         on the same character distribution that ``encode`` will see.
         """
         # 1. Normalize all texts
-        texts = [self._normalize(t) for t in texts]
+        texts = [normalize_text(t) for t in texts]
 
         # 2. Pre-tokenize and build unique-word counts (weighted)
         word_counts: Counter = Counter()
         for t in texts:
-            for w in self._pre_tokenize(t):
+            for w in pre_tokenize(t, self.regex_pattern):
                 word_counts[tuple(w)] += 1
 
         # 3. Build base character vocabulary (filters rare non-ASCII)
@@ -438,7 +429,7 @@ class BPETokenizer(Tokenizer):
 
         # Strip chars that didn't make the cut from word_counts
         kept_chars = set(self.vocab)
-        word_counts = self._filter_word_counts(word_counts, kept_chars)
+        word_counts = _filter_word_counts(word_counts, kept_chars)
 
         # 4. BPE merge loop
         while len(self.vocab) < self._target_vocab_size:
@@ -527,9 +518,9 @@ class BPETokenizer(Tokenizer):
             Sequence of integer token IDs. Characters that were filtered out
             during training (very rare non-ASCII) become ``<UNK>``.
         """
-        text = self._normalize(text)
+        text = normalize_text(text)
 
-        words = self._pre_tokenize(text)
+        words = pre_tokenize(text, self.regex_pattern)
         unk_id = self.vocab.get("<UNK>")
         ids = []
         for word in words:
@@ -537,29 +528,54 @@ class BPETokenizer(Tokenizer):
                 ids.append(self.vocab.get(token, unk_id))
         return ids
 
-    def decode(self, ids: list[int], skip_special_tokens: bool = True) -> str:
-        """Convert a list of token IDs back to text.
+    def save(self, path: str | os.PathLike) -> None:
+        """Save tokenizer state to a file.
 
         Parameters
         ----------
-        ids : list[int]
-            Sequence of integer token IDs.
-        skip_special_tokens : bool, optional (default=True)
-            Whether to exclude special tokens from the output.
+        path : str | os.PathLike
+            Destination path (typically a ``.pt`` file).
+        """
+        torch.save(
+            {
+                "vocab": self.vocab,
+                "id_to_token": self.id_to_token,
+                "merges": self.merges,
+                "merge_ranks": self.merge_ranks,
+                "special_tokens": self.special_tokens,
+                "regex_pattern": self.regex_pattern,
+            },
+            path,
+        )
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        path: str | os.PathLike,
+    ) -> BPETokenizer:
+        """Load a previously saved BPETokenizer from a file.
+
+        Parameters
+        ----------
+        path : str | os.PathLike
+            Path to a ``.pt`` file previously written by ``.save()``.
 
         Returns
         -------
-        text : str
-            Decoded text string.
+        tokenizer : BPETokenizer
+            Restored tokenizer with full vocab, merges, and config.
         """
-        tokens = [self.id_to_token[id] for id in ids]
-        if skip_special_tokens:
-            tokens = [t for t in tokens if t not in self.special_tokens]
-        return "".join(tokens)
-
-    def __len__(self) -> int:
-        """Number of tokens in the vocabulary."""
-        return len(self.vocab)
+        data = torch.load(path, map_location="cpu", weights_only=True)
+        tokenizer = cls(
+            vocab_size=len(data["vocab"]),
+            special_tokens=data["special_tokens"],
+            regex_pattern=data["regex_pattern"],
+        )
+        tokenizer.vocab = data["vocab"]
+        tokenizer.id_to_token = data["id_to_token"]
+        tokenizer.merges = data["merges"]
+        tokenizer.merge_ranks = data["merge_ranks"]
+        return tokenizer
 
     def __repr__(self) -> str:
         return (

@@ -4,7 +4,7 @@ tests/transformer/test_attention.py — Tests for attention mechanisms.
 
 import pytest
 import torch
-from core.transformer.transformer import (
+from core.transformer.attention import (
     MultiHeadAttention,
     _create_causal_mask,
     scaled_dot_product_attention,
