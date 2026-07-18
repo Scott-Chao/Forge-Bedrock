@@ -33,6 +33,9 @@ Build a Decoder-Only Transformer (GPT-family) on PyTorch. First-principles minim
 ### Phase 6: Transformer — BPE, GQA, MoE
 Phase 5's minimal GPT gets three modular upgrades: subword tokenization (BPE), grouped-query attention (GQA), and mixture of experts (MoE).
 
+### Phase 7: Convolutional Neural Networks
+Images demand different inductive biases than sequences: locality and translation equivariance. Conv2d (im2col) → Pooling → BatchNorm → ResNet → U-Net → ViT — the convolutional path and the transformer path through vision.
+
 [Full detailed roadmap → ROADMAP.md](ROADMAP.md)
 
 [Architecture overview → ARCHITECTURE.md](ARCHITECTURE.md)

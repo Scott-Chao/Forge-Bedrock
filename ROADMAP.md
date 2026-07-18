@@ -128,3 +128,25 @@ Phase 5's minimal GPT gets three modular upgrades: subword tokenization (BPE), g
     - [x] Training: 1 run on TinyShakespeare, loss curve vs Phase 5 baseline
 - [x] **Analysis Notebooks**
     - [x] MoE routing: expert activation heatmaps, load uniformity, routing entropy
+
+### Phase 7: Convolutional Neural Networks
+Images demand different inductive biases than sequences: locality and translation equivariance. Conv2d (im2col) → Pooling → BatchNorm → ResNet → U-Net → ViT — the convolutional path and the transformer path through vision.
+- [ ] **Core Layers** — vision primitives
+    - [ ] `Conv2d` forward via im2col: `F.unfold` + `matmul`, supporting kernel_size, stride, padding, dilation
+    - [ ] `MaxPool2d` / `AvgPool2d`: sliding-window reduction parameterized by kernel_size, stride, padding
+    - [ ] `BatchNorm2d`: normalize over (N, H, W), learnable γ/β; training batch stats → inference running mean/var
+    - [ ] `ConvTranspose2d`: forward via transpose of the im2col matrix, supporting kernel_size, stride, padding
+- [ ] **ResNet** — deep residual learning
+    - [ ] `BasicBlock` / `BottleneckBlock`: skip connection `F(x) + x`, 1×1 conv for dimension matching
+    - [ ] `ResNet`: configurable depth (ResNet-18/20/56), stem + 4 stages, global avg pooling + linear head
+- [ ] **U-Net** — encoder-decoder bridge
+    - [ ] `DownBlock`: ResBlock → MaxPool downsample (one encoder stage)
+    - [ ] `UpBlock`: ConvTranspose2d upsample → skip concat → ResBlock (one decoder stage)
+    - [ ] `UNet`: encoder (DownBlock × 4) → bottleneck → decoder (UpBlock × 4)
+- [ ] **ViT** — patches + transformer as the convolution alternative
+    - [ ] `PatchEmbed`: image → (patch × patch) flatten → Linear projection + [CLS] token + position embedding
+    - [ ] `ViT`: PatchEmbed → GPTBlock × N (no causal mask) → [CLS] → classification head
+- [ ] **Demo Notebooks**
+    - [ ] `resnet_cifar10.ipynb`: CIFAR-10 training with cosine LR, test accuracy
+    - [ ] `unet_demo.ipynb`: shape verification + feature map comparison with/without skip connections
+    - [ ] `vit_demo.ipynb`: ViT training on CIFAR-10 + comparison with ResNet
