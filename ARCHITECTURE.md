@@ -30,6 +30,8 @@ forge-bedrock/
 │   ├── distributions.py   # Theoretical distributions (Uniform, Bernoulli, Categorical, Normal)
 │   ├── info_theory.py     # Entropy, KL Divergence, Cross-Entropy
 │   └── bias_variance.py   # Bias-variance decomposition simulation
+├── core/cv/               # Computer Vision modules on PyTorch (Phase 7)
+│   └── conv2d.py          # Conv2d layer: im2col + GEMM implementation
 ├── core/transformer/      # Decoder-only Transformer (GPT) on PyTorch (Phase 5–6)
 │   ├── transformer.py     # GPTBlock (Pre-Norm: RMSNorm → Attn → RMSNorm → FF) + GPT
 │   ├── attention.py       # scaled_dot_product_attention + MultiHeadAttention / GQA
