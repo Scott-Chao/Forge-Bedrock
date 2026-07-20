@@ -12,13 +12,17 @@ MaxPool2d
     2D max-pooling via unfold + reduction.
 AvgPool2d
     2D average-pooling via unfold + reduction.
+BatchNorm2d
+    2D batch normalisation over (N, H, W) per channel.
 """
 
 from .conv2d import Conv2d
+from .normalization import BatchNorm2d
 from .pooling import AvgPool2d, MaxPool2d
 
 __all__ = [
     "AvgPool2d",
+    "BatchNorm2d",
     "Conv2d",
     "MaxPool2d",
 ]

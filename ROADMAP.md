@@ -134,7 +134,7 @@ Images demand different inductive biases than sequences: locality and translatio
 - [ ] **Core Layers** — vision primitives
     - [x] `Conv2d` forward via im2col: `F.unfold` + `matmul`, supporting kernel_size, stride, padding, dilation
     - [x] `MaxPool2d` / `AvgPool2d`: sliding-window reduction parameterized by kernel_size, stride, padding
-    - [ ] `BatchNorm2d`: normalize over (N, H, W), learnable γ/β; training batch stats → inference running mean/var
+    - [x] `BatchNorm2d`: normalize over (N, H, W), learnable γ/β; training batch stats → inference running mean/var
     - [ ] `ConvTranspose2d`: forward via transpose of the im2col matrix, supporting kernel_size, stride, padding
 - [ ] **ResNet** — deep residual learning
     - [ ] `BasicBlock` / `BottleneckBlock`: skip connection `F(x) + x`, 1×1 conv for dimension matching
