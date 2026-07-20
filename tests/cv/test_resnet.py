@@ -10,7 +10,7 @@ Verifies:
 
 import pytest
 import torch
-from core.cv import BasicBlock, BottleneckBlock
+from core.cv import BasicBlock, BottleneckBlock, ResNet
 
 # ============================================================================
 # 1. Forward — Shape Correctness
@@ -177,3 +177,105 @@ class TestEdgeCases:
         x = torch.randn(1, 128, 16, 16)
         out = block(x)
         assert out.shape == (1, 512, 8, 8), f"expected (1, 512, 8, 8), got {out.shape}"
+
+
+# ============================================================================
+# 5. ResNet — Full Network
+# ============================================================================
+
+
+class TestResNetInit:
+    """Construction and parameter correctness."""
+
+    @pytest.mark.parametrize("depth", [18, 34, 50, 101, 152])
+    def test_forward_shape(self, depth):
+        """Output shape is (N, num_classes) for all variants."""
+        rn = ResNet(depth=depth, num_classes=10)
+        x = torch.randn(2, 3, 224, 224)
+        out = rn(x)
+        assert out.shape == (2, 10), f"ResNet-{depth}: {out.shape}"
+
+    # Known parameter counts from the ResNet paper.
+    _EXPECTED_PARAMS = {
+        18: 11.7,
+        34: 21.8,
+        50: 25.5,
+        101: 44.5,
+        152: 60.2,
+    }
+
+    @pytest.mark.parametrize("depth,expected_m", _EXPECTED_PARAMS.items())
+    def test_parameter_count(self, depth, expected_m):
+        rn = ResNet(depth=depth)
+        total_m = sum(p.numel() for p in rn.parameters()) / 1e6
+        assert abs(total_m - expected_m) < 0.2, (
+            f"ResNet-{depth}: {total_m:.1f}M params, expected ~{expected_m}M"
+        )
+
+    def test_invalid_depth_raises(self):
+        with pytest.raises(ValueError, match="Unsupported depth"):
+            ResNet(depth=13)
+
+    def test_repr(self):
+        rn = ResNet(depth=50, num_classes=1000)
+        r = repr(rn)
+        assert "ResNet-50" in r
+        assert "25.5M" in r or "25.6M" in r or "25.4M" in r, f"Unexpected repr: {r}"
+
+    def test_custom_num_classes(self):
+        rn = ResNet(depth=18, num_classes=7)
+        x = torch.randn(1, 3, 224, 224)
+        out = rn(x)
+        assert out.shape == (1, 7)
+
+    @pytest.mark.parametrize("depth", [18, 50])
+    def test_zero_init_residual(self, depth):
+        """All residual blocks' last BN weight is zero."""
+        rn = ResNet(depth=depth, zero_init_residual=True)
+        for m in rn.modules():
+            if isinstance(m, BasicBlock):
+                assert m.trunk[4].weight.abs().sum().item() == 0
+            elif isinstance(m, BottleneckBlock):
+                assert m.trunk[7].weight.abs().sum().item() == 0
+
+
+class TestResNetForward:
+    """Stage-by-stage spatial sizes."""
+
+    _STAGE_SIZES = {
+        18: [(64, 56, 56), (64, 56, 56), (128, 28, 28), (256, 14, 14), (512, 7, 7)],
+        50: [(64, 56, 56), (256, 56, 56), (512, 28, 28), (1024, 14, 14), (2048, 7, 7)],
+    }
+
+    @pytest.mark.parametrize("depth,expected", _STAGE_SIZES.items())
+    def test_stage_output_shapes(self, depth, expected):
+        """Stem + 4 layers produce expected (C, H, W) at each stage."""
+        model = ResNet(depth=depth, zero_init_residual=True)
+        x = torch.randn(1, 3, 224, 224)
+
+        # Run up to each named child & capture shape
+        names = ["stem", "layer1", "layer2", "layer3", "layer4"]
+        h = x
+        for name, (c_exp, h_exp, w_exp) in zip(names, expected):
+            h = getattr(model, name)(h)
+            assert h.shape[1:] == (c_exp, h_exp, w_exp), (
+                f"ResNet-{depth} {name}: expected ({c_exp},{h_exp},{w_exp}), "
+                f"got {tuple(h.shape[1:])}"
+            )
+
+
+class TestResNetBackward:
+    """Gradient flow through the full network."""
+
+    @pytest.mark.parametrize("depth", [18, 50])
+    def test_grad_flows(self, depth):
+        x = torch.randn(1, 3, 64, 64, requires_grad=True)
+        rn = ResNet(depth=depth, num_classes=10)
+        out = rn(x).sum()
+        out.backward()
+        assert x.grad is not None, "input grad is None"
+        assert x.grad.shape == x.shape
+        # Every param in the network should receive a gradient
+        for name, p in rn.named_parameters():
+            assert p.grad is not None, f"{name} grad is None"
+            assert p.grad.shape == p.shape, f"{name} shape mismatch"

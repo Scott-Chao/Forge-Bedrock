@@ -20,13 +20,15 @@ BasicBlock
     ResNet basic residual block: two 3×3 convs + skip connection.
 BottleneckBlock
     ResNet bottleneck block: 1×1 → 3×3 → 1×1 + skip connection.
+ResNet
+    Configurable residual network (ResNet-18/34/50/101/152).
 """
 
 from .conv2d import Conv2d
 from .conv_transpose import ConvTranspose2d
 from .normalization import BatchNorm2d
 from .pooling import AvgPool2d, MaxPool2d
-from .resnet import BasicBlock, BottleneckBlock
+from .resnet import BasicBlock, BottleneckBlock, ResNet
 
 __all__ = [
     "AvgPool2d",
@@ -36,4 +38,5 @@ __all__ = [
     "Conv2d",
     "ConvTranspose2d",
     "MaxPool2d",
+    "ResNet",
 ]
