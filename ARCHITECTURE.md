@@ -31,7 +31,10 @@ forge-bedrock/
 │   ├── info_theory.py     # Entropy, KL Divergence, Cross-Entropy
 │   └── bias_variance.py   # Bias-variance decomposition simulation
 ├── core/cv/               # Computer Vision modules on PyTorch (Phase 7)
-│   └── conv2d.py          # Conv2d layer: im2col + GEMM implementation
+│   ├── conv2d.py          # Conv2d layer: im2col + GEMM implementation
+│   ├── conv_transpose.py  # ConvTranspose2d: matmul + fold (col2im)
+│   ├── normalization.py   # BatchNorm2d: training/eval modes
+│   └── pooling.py         # MaxPool2d & AvgPool2d: unfold + reduction
 ├── core/transformer/      # Decoder-only Transformer (GPT) on PyTorch (Phase 5–6)
 │   ├── transformer.py     # GPTBlock (Pre-Norm: RMSNorm → Attn → RMSNorm → FF) + GPT
 │   ├── attention.py       # scaled_dot_product_attention + MultiHeadAttention / GQA
