@@ -16,16 +16,23 @@ AvgPool2d
     2D average-pooling via unfold + reduction.
 BatchNorm2d
     2D batch normalisation over (N, H, W) per channel.
+BasicBlock
+    ResNet basic residual block: two 3×3 convs + skip connection.
+BottleneckBlock
+    ResNet bottleneck block: 1×1 → 3×3 → 1×1 + skip connection.
 """
 
 from .conv2d import Conv2d
 from .conv_transpose import ConvTranspose2d
 from .normalization import BatchNorm2d
 from .pooling import AvgPool2d, MaxPool2d
+from .resnet import BasicBlock, BottleneckBlock
 
 __all__ = [
     "AvgPool2d",
+    "BasicBlock",
     "BatchNorm2d",
+    "BottleneckBlock",
     "Conv2d",
     "ConvTranspose2d",
     "MaxPool2d",

@@ -137,7 +137,7 @@ Images demand different inductive biases than sequences: locality and translatio
     - [x] `BatchNorm2d`: normalize over (N, H, W), learnable γ/β; training batch stats → inference running mean/var
     - [x] `ConvTranspose2d`: forward via transpose of the im2col matrix (matmul + fold), supporting kernel_size, stride, padding, dilation, output_padding
 - [ ] **ResNet** — deep residual learning
-    - [ ] `BasicBlock` / `BottleneckBlock`: skip connection `F(x) + x`, 1×1 conv for dimension matching
+    - [x] `BasicBlock` / `BottleneckBlock`: skip connection `F(x) + x`, 1×1 conv for dimension matching
     - [ ] `ResNet`: configurable depth (ResNet-18/20/56), stem + 4 stages, global avg pooling + linear head
 - [ ] **U-Net** — encoder-decoder bridge
     - [ ] `DownBlock`: ResBlock → MaxPool downsample (one encoder stage)
