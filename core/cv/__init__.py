@@ -22,6 +22,14 @@ BottleneckBlock
     ResNet bottleneck block: 1×1 → 3×3 → 1×1 + skip connection.
 ResNet
     Configurable residual network (ResNet-18/34/50/101/152).
+DownBlock
+    U-Net encoder stage: double conv → max-pool downsampling, returns
+    (downsampled, skip) for decoder skip connection.
+UpBlock
+    U-Net decoder stage: conv-transpose upsample → skip concat →
+    double conv.
+UNet
+    Full U-shaped encoder-decoder with skip connections.
 """
 
 from .conv2d import Conv2d
@@ -29,6 +37,7 @@ from .conv_transpose import ConvTranspose2d
 from .normalization import BatchNorm2d
 from .pooling import AvgPool2d, MaxPool2d
 from .resnet import BasicBlock, BottleneckBlock, ResNet
+from .unet import DownBlock
 
 __all__ = [
     "AvgPool2d",
@@ -37,6 +46,7 @@ __all__ = [
     "BottleneckBlock",
     "Conv2d",
     "ConvTranspose2d",
+    "DownBlock",
     "MaxPool2d",
     "ResNet",
 ]
