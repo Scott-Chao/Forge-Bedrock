@@ -2,7 +2,7 @@
 
 import pytest
 import torch
-from core.cv import PatchEmbed
+from core.cv import PatchEmbed, ViT, ViTBlock
 
 
 class TestInit:
@@ -73,3 +73,118 @@ class TestEdgeCases:
         )
         out = embed(torch.randn(2, in_channels, img_size, img_size))
         assert out.shape == (2, seq_len, embed_dim)
+
+
+# ============================================================================
+# ViTBlock
+# ============================================================================
+
+
+class TestViTBlockShape:
+    """ViTBlock preserves shape and runs at train/eval."""
+
+    @pytest.mark.parametrize(
+        "batch,seq_len,d_model,n_heads",
+        [
+            (2, 17, 64, 4),
+            (4, 65, 256, 8),
+            (1, 197, 768, 12),
+        ],
+    )
+    def test_output_shape(self, batch, seq_len, d_model, n_heads):
+        block = ViTBlock(d_model=d_model, n_heads=n_heads)
+        x = torch.randn(batch, seq_len, d_model)
+        out = block(x)
+        assert out.shape == (batch, seq_len, d_model)
+
+    def test_output_differs_from_input(self):
+        """A real transformation happens (not identity)."""
+        block = ViTBlock(d_model=64, n_heads=4)
+        x = torch.randn(2, 17, 64)
+        out = block(x)
+        assert not torch.allclose(out, x, atol=1e-4)
+
+    def test_train_eval_differ_with_dropout(self):
+        """Dropout makes train/eval outputs differ (statistically)."""
+        block = ViTBlock(d_model=64, n_heads=4, dropout=0.5)
+        x = torch.randn(4, 17, 64)
+        block.train()
+        outs = torch.stack([block(x) for _ in range(10)])
+        train_var = outs.var(dim=0).mean()
+        block.eval()
+        outs = torch.stack([block(x) for _ in range(10)])
+        eval_var = outs.var(dim=0).mean()
+        assert train_var > eval_var * 2, "train variance should exceed eval variance"
+
+
+class TestViTBlockBackward:
+    def test_gradient_flows(self):
+        block = ViTBlock(d_model=64, n_heads=4)
+        x = torch.randn(2, 17, 64)
+        out = block(x).sum()
+        out.backward()
+        for name, param in block.named_parameters():
+            assert param.grad is not None, f"{name} has no grad"
+            assert param.grad.shape == param.shape
+
+
+# ============================================================================
+# ViT
+# ============================================================================
+
+
+class TestViTShape:
+    """ViT produces correct classification logits."""
+
+    @pytest.mark.parametrize(
+        "depth,num_classes",
+        [
+            (1, 10),
+            (2, 100),
+            (4, 5),
+        ],
+    )
+    def test_output_shape(self, depth, num_classes):
+        vit = ViT(
+            img_size=32,
+            patch_size=8,
+            num_classes=num_classes,
+            embed_dim=128,
+            depth=depth,
+            n_heads=4,
+        )
+        x = torch.randn(2, 3, 32, 32)
+        logits = vit(x)
+        assert logits.shape == (2, num_classes)
+
+    def test_cls_token_path(self):
+        """Classification head operates on [CLS] token (index 0)."""
+        vit = ViT(
+            img_size=32,
+            patch_size=8,
+            num_classes=10,
+            embed_dim=64,
+            depth=2,
+            n_heads=4,
+        )
+        x = torch.randn(2, 3, 32, 32)
+        logits = vit(x)
+        assert logits.dim() == 2  # (batch, num_classes), not (batch, seq, ...)
+        assert logits.shape[1] == 10
+
+
+class TestViTBackward:
+    def test_gradient_flows(self):
+        vit = ViT(
+            img_size=32,
+            patch_size=8,
+            num_classes=5,
+            embed_dim=64,
+            depth=2,
+            n_heads=4,
+        )
+        x = torch.randn(2, 3, 32, 32)
+        vit(x).sum().backward()
+        for name, param in vit.named_parameters():
+            assert param.grad is not None, f"{name} has no grad"
+            assert param.grad.shape == param.shape
