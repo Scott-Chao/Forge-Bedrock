@@ -38,6 +38,7 @@ from .normalization import BatchNorm2d
 from .pooling import AvgPool2d, MaxPool2d
 from .resnet import BasicBlock, BottleneckBlock, ResNet
 from .unet import DownBlock, UNet, UpBlock
+from .vit import PatchEmbed
 
 __all__ = [
     "AvgPool2d",
@@ -48,6 +49,7 @@ __all__ = [
     "ConvTranspose2d",
     "DownBlock",
     "MaxPool2d",
+    "PatchEmbed",
     "ResNet",
     "UNet",
     "UpBlock",

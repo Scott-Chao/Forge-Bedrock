@@ -144,7 +144,7 @@ Images demand different inductive biases than sequences: locality and translatio
     - [x] `UpBlock`: ConvTranspose2d upsample → skip concat → ResBlock (one decoder stage)
     - [x] `UNet`: encoder (DownBlock × 4) → bottleneck → decoder (UpBlock × 4)
 - [ ] **ViT** — patches + transformer as the convolution alternative
-    - [ ] `PatchEmbed`: image → (patch × patch) flatten → Linear projection + [CLS] token + position embedding
+    - [x] `PatchEmbed`: image → (patch × patch) flatten → Linear projection + [CLS] token + position embedding
     - [ ] `ViT`: PatchEmbed → GPTBlock × N (no causal mask) → [CLS] → classification head
 - [ ] **Demo Notebooks**
     - [ ] `resnet_cifar10.ipynb`: CIFAR-10 training with cosine LR, test accuracy
