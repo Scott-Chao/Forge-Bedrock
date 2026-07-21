@@ -1,15 +1,14 @@
 """
-tests/cv/test_unet.py — Tests for U-Net building blocks (DownBlock).
+tests/cv/test_unet.py — Tests for U-Net building blocks (DownBlock, UpBlock).
 
 Verifies:
-  - Output shapes for all configurations (residual/non-residual, channel change).
-  - Skip tensor is the pre-pool version of the output tensor.
-  - Gradient flows through both return values.
+  - DownBlock: output shapes, skip semantics, gradient flow.
+  - UpBlock: output shapes, channel/spatial transform, skip usage, gradient flow.
 """
 
 import pytest
 import torch
-from core.cv import DownBlock
+from core.cv import DownBlock, UpBlock
 
 # ============================================================================
 # 1. Forward — Shape Correctness
@@ -138,3 +137,80 @@ class TestBackward:
         assert block.skip_proj.weight.grad.abs().sum().item() > 0, (
             "skip projection grad is all-zero — maybe not connected?"
         )
+
+
+# ============================================================================
+# UpBlock Tests
+# ============================================================================
+
+
+class TestUpBlockShape:
+    N, H, W = 2, 16, 16
+
+    @pytest.mark.parametrize(
+        "in_c,out_c,note",
+        [
+            (1024, 512, "bottleneck → decoder"),
+            (512, 256, "mid decoder"),
+            (64, 64, "same channels"),
+            (128, 3, "final decoder → output"),
+        ],
+    )
+    def test_output_shapes(self, in_c, out_c, note):
+        """Output has correct channels and 2× spatial size."""
+        up = UpBlock(in_c, out_c)
+        x = torch.randn(self.N, in_c, self.H, self.W)
+        skip = torch.randn(self.N, out_c, self.H * 2, self.W * 2)
+        y = up(x, skip)
+
+        expected = (self.N, out_c, self.H * 2, self.W * 2)
+        assert y.shape == expected, f"[{note}] expected {expected}, got {list(y.shape)}"
+
+    def test_without_skip_returns_different(self):
+        """Changing skip content changes output (skip is actually used)."""
+        up = UpBlock(64, 32)
+        x = torch.randn(2, 64, 8, 8)
+        skip_a = torch.randn(2, 32, 16, 16)
+        skip_b = torch.randn(2, 32, 16, 16) + 100.0  # very different
+
+        out_a = up(x, skip_a)
+        out_b = up(x, skip_b)
+        # Outputs should differ by more than numerical noise
+        diff = (out_a - out_b).abs().mean().item()
+        assert diff > 0.1, f"skip should influence output, diff={diff:.6f}"
+
+    def test_identity_when_skip_is_zero(self):
+        """When skip is zero and x is controlled, the block still processes."""
+        up = UpBlock(64, 32)
+        x = torch.randn(2, 64, 8, 8)
+        skip = torch.zeros(2, 32, 16, 16)
+        y = up(x, skip)
+        assert y.shape == (2, 32, 16, 16)
+        assert not torch.isnan(y).any(), "output has NaN on zero skip"
+
+
+# ============================================================================
+# UpBlock — Gradient Flow
+# ============================================================================
+
+
+class TestUpBlockGrad:
+    N, H, W = 2, 8, 8
+
+    @pytest.mark.parametrize("in_c,out_c", [(1024, 512), (64, 64)])
+    def test_grad_flows_from_output(self, in_c, out_c):
+        """Gradient flows through up_conv and conv, into both inputs."""
+        up = UpBlock(in_c, out_c)
+        x = torch.randn(self.N, in_c, self.H, self.W, requires_grad=True)
+        skip = torch.randn(self.N, out_c, self.H * 2, self.W * 2, requires_grad=True)
+
+        y = up(x, skip)
+        y.sum().backward()
+
+        assert x.grad is not None, "decoder input x has no grad"
+        assert skip.grad is not None, "skip input has no grad"
+        assert x.grad.shape == x.shape
+        assert skip.grad.shape == skip.shape
+        for name, p in up.named_parameters():
+            assert p.grad is not None, f"{name} grad is None"
+            assert p.grad.shape == p.shape, f"{name} grad shape mismatch"

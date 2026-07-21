@@ -26,6 +26,7 @@ import torch
 import torch.nn as nn
 
 from .conv2d import Conv2d
+from .conv_transpose import ConvTranspose2d
 from .normalization import BatchNorm2d
 from .pooling import MaxPool2d
 
@@ -142,3 +143,79 @@ class DownBlock(nn.Module):
     def extra_repr(self) -> str:
         """Return a formatted string for ``print(down_block)``."""
         return f"residual={self.use_residual}"
+
+
+# ============================================================================
+# UpBlock — one decoder stage
+# ============================================================================
+
+
+class UpBlock(nn.Module):
+    """One decoder stage: transposed-conv upsample → skip concat → double conv.
+
+    Takes a low-resolution feature map from the previous decoder level
+    (or the bottleneck), upsamples it 2×, concatenates the corresponding
+    encoder's skip connection feature along the channel dimension, then
+    applies a double convolution to fuse the information.
+
+    Parameters
+    ----------
+    in_channels : int
+        Number of channels of the input from the previous decoder level
+        (or bottleneck).
+    out_channels : int
+        Target number of output channels.  **Must** equal the number of
+        channels of the matching encoder skip connection for a symmetric
+        U-Net.
+
+    Shape
+    -----
+    Input:
+        x : (N, in_channels, H, W)  — decoder input (from below)
+        skip : (N, out_channels, 2H, 2W) — encoder skip connection
+
+    Output:
+        (N, out_channels, 2H, 2W)
+
+        Note: ``skip_channels == out_channels`` for a symmetric U-Net.
+        If the spatial sizes of ``x_up`` and ``skip`` differ slightly
+        (due to odd input dimensions), the code should centre-crop or
+        pad ``skip`` before concatenation.
+    """
+
+    def __init__(self, in_channels: int, out_channels: int) -> None:
+        super().__init__()
+
+        self.up_conv = ConvTranspose2d(in_channels, out_channels, 2, stride=2)
+        self.conv = _DoubleConv(2 * out_channels, out_channels)
+
+    def forward(self, x: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
+        """Forward pass.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Decoder input (from the previous level or bottleneck).
+            Shape: (N, in_channels, H, W).
+        skip : torch.Tensor
+            Encoder skip connection feature.
+            Shape: (N, out_channels, 2H, 2W).
+
+        Returns
+        -------
+        torch.Tensor
+            Output feature map of shape (N, out_channels, 2H, 2W).
+        """
+        x = self.up_conv(x)
+        diff_y = skip.size(2) - x.size(2)
+        diff_x = skip.size(3) - x.size(3)
+        if diff_y or diff_x:
+            skip = skip[
+                :,
+                :,
+                diff_y // 2 : skip.size(2) - (diff_y - diff_y // 2),
+                diff_x // 2 : skip.size(3) - (diff_x - diff_x // 2),
+            ]
+        x = torch.cat([skip, x], dim=1)
+        x = self.conv(x)
+        return x
