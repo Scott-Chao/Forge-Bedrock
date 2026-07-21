@@ -219,3 +219,114 @@ class UpBlock(nn.Module):
         x = torch.cat([skip, x], dim=1)
         x = self.conv(x)
         return x
+
+
+# ============================================================================
+# UNet — full encoder-decoder with skip connections
+# ============================================================================
+
+
+class UNet(nn.Module):
+    """U-Net: symmetric encoder-decoder for image segmentation.
+
+    Assembles a U-shaped architecture from repeated ``DownBlock``
+    (encoder) and ``UpBlock`` (decoder) stages, connected by skip
+    connections.  A 1×1 convolution maps the final decoder features
+    to the target number of classes.
+
+    Parameters
+    ----------
+    in_channels : int, default=3
+        Number of input image channels (e.g. 3 for RGB).
+    num_classes : int, default=1
+        Number of output segmentation classes.  For binary segmentation
+        ``num_classes=1``; for multi-class ``num_classes=N``.
+    base_channels : int, default=64
+        Number of channels in the **first** encoder stage.  Each
+        subsequent stage doubles the channel count (until the
+        bottleneck).
+    depth : int, default=4
+        Number of encoder (and decoder) stages.  The spatial dimensions
+        are halved at each encoder stage, so the input resolution must
+        be divisible by ``2 ** depth``.
+    use_residual : bool, default=True
+        Whether DownBlock uses residual connections.
+
+    Shape
+    -----
+    Input:  (N, in_channels, H, W)
+    Output: (N, num_classes, H, W)   — same spatial resolution as input.
+
+    .. caution::
+        ``H`` and ``W`` must be divisible by ``2 ** depth``.
+
+    Example
+    -------
+    >>> model = UNet(in_channels=3, num_classes=1, base_channels=64, depth=4)
+    >>> x = torch.randn(4, 3, 256, 256)
+    >>> y = model(x)
+    >>> y.shape
+    torch.Size([4, 1, 256, 256])
+    """
+
+    def __init__(
+        self,
+        in_channels: int = 3,
+        num_classes: int = 1,
+        base_channels: int = 64,
+        depth: int = 4,
+        use_residual: bool = True,
+    ) -> None:
+        super().__init__()
+
+        self.depth = depth
+        self.base_channels = base_channels
+        channels = [in_channels] + [base_channels * (2**i) for i in range(depth + 1)]
+
+        self.encoder = nn.ModuleList(
+            [
+                DownBlock(channels[i], channels[i + 1], use_residual)
+                for i in range(depth)
+            ]
+        )
+        self.bottleneck = _DoubleConv(channels[depth], channels[depth + 1])
+        self.decoder = nn.ModuleList(
+            [UpBlock(channels[i + 1], channels[i]) for i in range(depth, 0, -1)]
+        )
+        self.out_conv = Conv2d(base_channels, num_classes, kernel_size=1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass through encoder → bottleneck → decoder.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input of shape (N, in_channels, H, W).
+            ``H`` and ``W`` must be divisible by ``2 ** depth``.
+
+        Returns
+        -------
+        torch.Tensor
+            Segmentation map of shape (N, num_classes, H, W).
+        """
+        skips = []
+        for down in self.encoder:
+            x, skip = down(x)
+            skips.append(skip)
+        x = self.bottleneck(x)
+        for up, skip in zip(self.decoder, reversed(skips)):
+            x = up(x, skip)
+        x = self.out_conv(x)
+        return x
+
+    def _channel_list(self) -> list[int]:
+        """Return the channel count at each encoder level (for debugging)."""
+        return [self.base_channels * (2**i) for i in range(self.depth)]
+
+    def extra_repr(self) -> str:
+        """Return a formatted string for ``print(unet)``."""
+        total = sum(p.numel() for p in self.parameters())
+        return (
+            f"depth={self.depth}, base_channels={self.base_channels}, "
+            f"params={total / 1e6:.1f}M"
+        )

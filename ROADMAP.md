@@ -139,10 +139,10 @@ Images demand different inductive biases than sequences: locality and translatio
 - [x] **ResNet** — deep residual learning
     - [x] `BasicBlock` / `BottleneckBlock`: skip connection `F(x) + x`, 1×1 conv for dimension matching
     - [x] `ResNet`: configurable depth (ResNet-18/34/50/101/152), stem + 4 stages, global avg pooling + linear head
-- [ ] **U-Net** — encoder-decoder bridge
+- [x] **U-Net** — encoder-decoder bridge
     - [x] `DownBlock`: ResBlock → MaxPool downsample (one encoder stage)
     - [x] `UpBlock`: ConvTranspose2d upsample → skip concat → ResBlock (one decoder stage)
-    - [ ] `UNet`: encoder (DownBlock × 4) → bottleneck → decoder (UpBlock × 4)
+    - [x] `UNet`: encoder (DownBlock × 4) → bottleneck → decoder (UpBlock × 4)
 - [ ] **ViT** — patches + transformer as the convolution alternative
     - [ ] `PatchEmbed`: image → (patch × patch) flatten → Linear projection + [CLS] token + position embedding
     - [ ] `ViT`: PatchEmbed → GPTBlock × N (no causal mask) → [CLS] → classification head

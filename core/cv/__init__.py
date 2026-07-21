@@ -37,7 +37,7 @@ from .conv_transpose import ConvTranspose2d
 from .normalization import BatchNorm2d
 from .pooling import AvgPool2d, MaxPool2d
 from .resnet import BasicBlock, BottleneckBlock, ResNet
-from .unet import DownBlock, UpBlock
+from .unet import DownBlock, UNet, UpBlock
 
 __all__ = [
     "AvgPool2d",
@@ -49,5 +49,6 @@ __all__ = [
     "DownBlock",
     "MaxPool2d",
     "ResNet",
+    "UNet",
     "UpBlock",
 ]

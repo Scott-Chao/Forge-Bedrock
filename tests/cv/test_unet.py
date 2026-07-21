@@ -8,7 +8,7 @@ Verifies:
 
 import pytest
 import torch
-from core.cv import DownBlock, UpBlock
+from core.cv import DownBlock, UNet, UpBlock
 
 # ============================================================================
 # 1. Forward — Shape Correctness
@@ -214,3 +214,138 @@ class TestUpBlockGrad:
         for name, p in up.named_parameters():
             assert p.grad is not None, f"{name} grad is None"
             assert p.grad.shape == p.shape, f"{name} grad shape mismatch"
+
+
+# ============================================================================
+# UpBlock — Odd-size center crop
+# ============================================================================
+
+
+class TestUpBlockOddCrop:
+    """When upsampled x and skip differ by 1 pixel (odd input dims),
+    UpBlock centre-crops skip to match before concatenation."""
+
+    N = 2
+
+    @pytest.mark.parametrize(
+        "h,w,note",
+        [
+            (16, 15, "odd width"),
+            (15, 16, "odd height"),
+            (15, 15, "both odd"),
+        ],
+    )
+    def test_odd_crop_produces_valid_output(self, h, w, note):
+        """No crash, output spatial = 2 * input spatial after crop."""
+        up = UpBlock(64, 32)
+        x = torch.randn(self.N, 64, h, w)
+        skip = torch.randn(self.N, 32, h * 2, w * 2)
+        y = up(x, skip)
+        assert y.shape == (self.N, 32, h * 2, w * 2), (
+            f"[{note}] expected ({self.N},32,{h * 2},{w * 2}), got {list(y.shape)}"
+        )
+
+    def test_skip_is_actually_cropped(self):
+        """Verify centre-crop logic: a different skip region produces
+        the same output after crop alignment."""
+        up = UpBlock(64, 32)
+        x = torch.randn(1, 64, 15, 15)  # odd → x_up = (1, 32, 30, 30)
+        # skip with the centercrop region shifted
+        skip_a = torch.randn(1, 32, 30, 30)
+        skip_b = skip_a.clone()
+        skip_b[:, :, 1:, :] = skip_a[:, :, :-1, :]  # shift down by 1
+
+        y_a = up(x, skip_a)
+        y_b = up(x, skip_b)
+        diff = (y_a - y_b).abs().mean().item()
+        assert diff > 1e-4, "crop misalignment should change output"
+
+
+# ============================================================================
+# UNet — Full Network
+# ============================================================================
+
+
+class TestUNetShape:
+    """Forward pass produces the correct output resolution."""
+
+    @pytest.mark.parametrize(
+        "depth,bc,cls_,spatial,note",
+        [
+            (4, 64, 1, (64, 64), "default depth=4, 64×64"),
+            (4, 64, 1, (256, 256), "default, 256×256"),
+            (3, 32, 1, (64, 64), "depth=3, base=32"),
+            (4, 32, 10, (128, 128), "10 classes, base=32"),
+            (2, 16, 3, (32, 32), "shallow depth=2, RGB seg"),
+        ],
+    )
+    def test_output_shape(self, depth, bc, cls_, spatial, note):
+        model = UNet(
+            in_channels=3,
+            num_classes=cls_,
+            base_channels=bc,
+            depth=depth,
+        )
+        x = torch.randn(2, 3, *spatial)
+        y = model(x)
+        assert y.shape == (2, cls_, *spatial), (
+            f"[{note}] expected (2,{cls_},{spatial[0]},{spatial[1]}), "
+            f"got {list(y.shape)}"
+        )
+
+    def test_repr(self):
+        model = UNet(depth=4, base_channels=64)
+        r = repr(model)
+        assert "depth=4" in r
+        assert "base_channels=64" in r
+        assert "M" in r  # parameter count suffix
+
+
+class TestUNetGrad:
+    """Gradient flows through the full U-Net."""
+
+    @pytest.mark.parametrize("depth", [2, 3])
+    def test_grad_flows(self, depth):
+        model = UNet(in_channels=3, num_classes=1, base_channels=16, depth=depth)
+        x = torch.randn(1, 3, 32, 32, requires_grad=True)
+        y = model(x)
+        y.sum().backward()
+
+        assert x.grad is not None, "input grad is None"
+        assert x.grad.shape == x.shape
+        for name, p in model.named_parameters():
+            assert p.grad is not None, f"{name} grad is None"
+            assert p.grad.shape == p.shape, f"{name} grad shape mismatch"
+
+
+class TestUNetConfig:
+    """Construction and parameter sanity."""
+
+    def test_default_num_classes(self):
+        model = UNet()
+        assert model.out_conv.out_channels == 1
+
+    def test_custom_num_classes(self):
+        model = UNet(num_classes=20)
+        assert model.out_conv.out_channels == 20
+
+    def test_encoder_depth_matches(self):
+        model = UNet(depth=3)
+        assert len(model.encoder) == 3
+        assert len(model.decoder) == 3
+
+    def test_decoder_channels_symmetric(self):
+        """Encoder output channels reverse decoder output channels."""
+        depth, bc = 4, 32
+        model = UNet(depth=depth, base_channels=bc)
+
+        def _out_c(block):
+            # DownBlock stores double_conv, UpBlock stores conv
+            dc = getattr(block, "double_conv", None) or block.conv
+            return dc.conv[-2].out_channels  # last Conv2d's out_channels
+
+        enc = [_out_c(d) for d in model.encoder]
+        dec = [_out_c(d) for d in model.decoder]
+        assert enc == list(reversed(dec)), (
+            f"encoder {enc} should be reverse of decoder {dec}"
+        )
