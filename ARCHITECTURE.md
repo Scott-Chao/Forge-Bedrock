@@ -50,6 +50,9 @@ forge-bedrock/
 │   ├── resnet.py          # ResNet: BasicBlock, BottleneckBlock, ResNet (configurable depth)
 │   ├── unet.py            # U-Net: DownBlock, UpBlock, UNet (skip connections)
 │   └── vit.py             # ViT: PatchEmbed, ViTBlock, ViT (patches + transformer)
+├── core/gen/              # Generative Models on PyTorch (Phase 8)
+│   ├── __init__.py        # Exports Encoder, Decoder, VAE
+│   └── vae.py             # VAE: Encoder → Reparameterize → Decoder, ELBO loss
 ├── apps/                  # Application Jupyter Notebooks
 │   ├── image_compression.ipynb        # SVD-based low-rank image compression
 │   ├── least_squares_regression.ipynb # Normal Equation vs Pseudoinverse
