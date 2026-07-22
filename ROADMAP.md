@@ -151,9 +151,9 @@ Images demand different inductive biases than sequences: locality and translatio
 
 ### Phase 8: Generative Models — VAE, GAN, Diffusion
 Three generative paradigms on Phase 7's Conv/ConvTranspose backbone: latent-variable inference (VAE), adversarial equilibrium (GAN), denoising score matching (Diffusion).
-- [ ] **VAE** — variational autoencoder
+- [x] **VAE** — variational autoencoder
     - [x] `VAE`: encoder $\to$ reparameterize $\to$ decoder, ELBO loss
-    - [ ] Notebook: MNIST generation, latent space walk, reconstruction $\times$ KL tradeoff
+    - [x] Notebook: MNIST generation, latent space walk, reconstruction $\times$ KL tradeoff
 - [ ] **GAN** — adversarial training through min-max optimisation
     - [ ] `Generator`: noise $\to$ ConvTranspose2d upsamples $\to$ image
     - [ ] `Discriminator`: image $\to$ Conv2d downsamples $\to$ real/fake logit
