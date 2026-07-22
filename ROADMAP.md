@@ -148,3 +148,23 @@ Images demand different inductive biases than sequences: locality and translatio
     - [x] `ViT`: PatchEmbed → ViTBlock × N (bidirectional, no RoPE) → [CLS] → classification head
 - [x] **Analysis Notebook**
     - [x] `vit_demo.ipynb`: [CLS] attention map + position embedding structure + head diversity
+
+### Phase 8: Generative Models — VAE, GAN, Diffusion
+Three generative paradigms on Phase 7's Conv/ConvTranspose backbone: latent-variable inference (VAE), adversarial equilibrium (GAN), denoising score matching (Diffusion).
+- [ ] **VAE** — variational autoencoder
+    - [ ] `VAE`: encoder $\to$ reparameterize $\to$ decoder, ELBO loss
+    - [ ] Notebook: MNIST generation, latent space walk, reconstruction $\times$ KL tradeoff
+- [ ] **GAN** — adversarial training through min-max optimisation
+    - [ ] `Generator`: noise $\to$ ConvTranspose2d upsamples $\to$ image
+    - [ ] `Discriminator`: image $\to$ Conv2d downsamples $\to$ real/fake logit
+    - [ ] Alternating training loop: G step $\to$ D step
+    - [ ] [Extension] DCGAN: remove FC layers, add BN for stable training
+    - [ ] Notebook: loss curves, mode collapse observation, G vs D dynamic
+- [ ] **Diffusion Models** — denoising diffusion probabilistic models
+    - [ ] Building blocks: `NoiseScheduler` (linear $\beta$ schedule, $\bar{\alpha}_t$) + `TimeEmbedding` (sinusoidal encoding for step $t$)
+    - [ ] `TimeConditionedUNet`: Phase 7's U-Net + time-step conditioning (scale/shift modulation)
+    - [ ] DDPM training: $\mathcal{L}_{\text{simple}} = \mathbb{E}_{t,x_0,\epsilon}[\|\epsilon - \epsilon_\theta(x_t, t)\|^2]$
+    - [ ] DDPM sampling: $x_T \sim \mathcal{N}(0, I) \to x_{T-1} \to \dots \to x_0$
+    - [ ] [Extension] DDIM: deterministic sampling, $10\times$+ speedup
+    - [ ] [Extension] Class-conditioned diffusion: inject class embedding $c$ via scale/shift modulation 
+    - [ ] Notebook: forward noising visualisation, reverse denoising step-by-step, DDPM vs DDIM

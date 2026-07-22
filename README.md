@@ -36,6 +36,9 @@ Phase 5's minimal GPT gets three modular upgrades: subword tokenization (BPE), g
 ### Phase 7: Convolutional Neural Networks
 Images demand different inductive biases than sequences: locality and translation equivariance. Conv2d (im2col) → Pooling → BatchNorm → ResNet → U-Net → ViT — the convolutional path and the transformer path through vision.
 
+### Phase 8: Generative Models — VAE, GAN, Diffusion
+Three generative paradigms on Phase 7's Conv/ConvTranspose backbone: latent-variable inference (VAE), adversarial equilibrium (GAN), denoising score matching (Diffusion).
+
 [Full detailed roadmap → ROADMAP.md](ROADMAP.md)
 
 [Architecture overview → ARCHITECTURE.md](ARCHITECTURE.md)
