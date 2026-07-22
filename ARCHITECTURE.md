@@ -30,11 +30,6 @@ forge-bedrock/
 │   ├── distributions.py   # Theoretical distributions (Uniform, Bernoulli, Categorical, Normal)
 │   ├── info_theory.py     # Entropy, KL Divergence, Cross-Entropy
 │   └── bias_variance.py   # Bias-variance decomposition simulation
-├── core/cv/               # Computer Vision modules on PyTorch (Phase 7)
-│   ├── conv2d.py          # Conv2d layer: im2col + GEMM implementation
-│   ├── conv_transpose.py  # ConvTranspose2d: matmul + fold (col2im)
-│   ├── normalization.py   # BatchNorm2d: training/eval modes
-│   └── pooling.py         # MaxPool2d & AvgPool2d: unfold + reduction
 ├── core/transformer/      # Decoder-only Transformer (GPT) on PyTorch (Phase 5–6)
 │   ├── transformer.py     # GPTBlock (Pre-Norm: RMSNorm → Attn → RMSNorm → FF) + GPT
 │   ├── attention.py       # scaled_dot_product_attention + MultiHeadAttention / GQA
@@ -47,6 +42,14 @@ forge-bedrock/
 │   ├── kv_cache.py        # O(n²) → O(n) decode via cached K, V tensors
 │   ├── sampling.py        # Token sampling: argmax → temperature → top-k → top-p (nucleus)
 │   └── checkpoint.py      # load_checkpoint: restore trained GPT + tokenizer from disk
+├── core/cv/               # Computer Vision modules on PyTorch (Phase 7)
+│   ├── conv2d.py          # Conv2d layer: im2col + GEMM implementation
+│   ├── conv_transpose.py  # ConvTranspose2d: matmul + fold (col2im)
+│   ├── normalization.py   # BatchNorm2d: training/eval modes
+│   ├── pooling.py         # MaxPool2d & AvgPool2d: unfold + reduction
+│   ├── resnet.py          # ResNet: BasicBlock, BottleneckBlock, ResNet (configurable depth)
+│   ├── unet.py            # U-Net: DownBlock, UpBlock, UNet (skip connections)
+│   └── vit.py             # ViT: PatchEmbed, ViTBlock, ViT (patches + transformer)
 ├── apps/                  # Application Jupyter Notebooks
 │   ├── image_compression.ipynb        # SVD-based low-rank image compression
 │   ├── least_squares_regression.ipynb # Normal Equation vs Pseudoinverse
@@ -56,17 +59,20 @@ forge-bedrock/
 │   ├── compare_losses_regression.ipynb      # MSE vs L1 vs Huber on outliers
 │   ├── bias_variance_tradeoff.ipynb         # Bias-variance decomposition demo
 │   ├── pdf_pmf_visualization.ipynb          # Distribution visualisation
-│   ├── toy_loss_surface_comparison.ipynb     # Beale & Rosenbrock with 7 optimisers
+│   ├── toy_loss_surface_comparison.ipynb    # Beale & Rosenbrock with 7 optimisers
 │   ├── optimiser_comparison_classifier.ipynb # SGD vs Momentum vs Adam on moons
 │   ├── train_gpt.ipynb                 # Full training pipeline on TinyShakespeare
 │   ├── analysis_attention_rope.ipynb   # Attention pattern heatmaps + RoPE visualisation
-│   └── analysis_sampling.ipynb         # Temperature, Top-k, Top-p comparison
+│   ├── analysis_moe_routing.ipynb      # MoE expert activation heatmaps & routing entropy
+│   ├── analysis_sampling.ipynb         # Temperature, Top-k, Top-p sampling comparison
+│   └── vit_cifar10.ipynb              # ViT training on CIFAR-10 with cosine LR schedule
 ├── tests/                 # pytest tests mirroring core/ structure
 │   ├── linalg/            # Tests for Phase 1 (matrix, eigen, solver, SVD)
 │   ├── autograd/          # Tests for Phase 2 (value, functional with finite differences)
 │   ├── nn/                # Tests for Phase 2–4 (all layers, losses, optimisers, schedulers)
 │   ├── prob/              # Tests for Phase 3 (distributions, info theory)
-│   └── transformer/       # Tests for Phase 5 (transformer, normalization, sampling, generation)
+│   ├── transformer/       # Tests for Phase 5–6 (attention, block, moe, sampling, gpt)
+│   └── cv/                # Tests for Phase 7 (conv2d, pooling, resnet, unet, vit)
 ├── assets/                # Static resources (images, etc.)
 └── environment.yml        # conda environment
 ```
