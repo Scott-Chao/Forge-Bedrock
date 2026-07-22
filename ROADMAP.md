@@ -145,8 +145,6 @@ Images demand different inductive biases than sequences: locality and translatio
     - [x] `UNet`: encoder (DownBlock × 4) → bottleneck → decoder (UpBlock × 4)
 - [x] **ViT** — patches + transformer as the convolution alternative
     - [x] `PatchEmbed`: image → (patch × patch) flatten → Linear projection + [CLS] token + position embedding
-    - [x] `ViT`: PatchEmbed → GPTBlock × N (no causal mask) → [CLS] → classification head
-- [ ] **Demo Notebooks**
-    - [ ] `resnet_cifar10.ipynb`: CIFAR-10 training with cosine LR, test accuracy
-    - [ ] `unet_demo.ipynb`: shape verification + feature map comparison with/without skip connections
-    - [ ] `vit_demo.ipynb`: ViT training on CIFAR-10 + comparison with ResNet
+    - [x] `ViT`: PatchEmbed → ViTBlock × N (bidirectional, no RoPE) → [CLS] → classification head
+- [x] **Analysis Notebook**
+    - [x] `vit_demo.ipynb`: [CLS] attention map + position embedding structure + head diversity
