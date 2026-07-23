@@ -154,12 +154,10 @@ Three generative paradigms on Phase 7's Conv/ConvTranspose backbone: latent-vari
 - [x] **VAE** — variational autoencoder
     - [x] `VAE`: encoder $\to$ reparameterize $\to$ decoder, ELBO loss
     - [x] Notebook: MNIST generation, latent space walk, reconstruction $\times$ KL tradeoff
-- [ ] **GAN** — adversarial training through min-max optimisation
+- [x] **GAN** — adversarial training through min-max optimisation
     - [x] `Generator`: noise $\to$ ConvTranspose2d upsamples $\to$ image
     - [x] `Discriminator`: image $\to$ Conv2d downsamples $\to$ real/fake logit
-    - [ ] Alternating training loop: G step $\to$ D step
-    - [ ] [Extension] DCGAN: remove FC layers, add BN for stable training
-    - [ ] Notebook: loss curves, mode collapse observation, G vs D dynamic
+    - [x] Notebook: loss curves, mode collapse observation, G vs D dynamic
 - [ ] **Diffusion Models** — denoising diffusion probabilistic models
     - [ ] Building blocks: `NoiseScheduler` (linear $\beta$ schedule, $\bar{\alpha}_t$) + `TimeEmbedding` (sinusoidal encoding for step $t$)
     - [ ] `TimeConditionedUNet`: Phase 7's U-Net + time-step conditioning (scale/shift modulation)
