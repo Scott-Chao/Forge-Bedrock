@@ -11,10 +11,13 @@ Each module uses PyTorch (Phase 5+ convention) and reuses components from
 core/cv (Conv2d, ConvTranspose2d, etc.) where appropriate.
 """
 
+from .gan import Discriminator, Generator
 from .vae import VAE, Decoder, Encoder
 
 __all__ = [
     "Decoder",
+    "Discriminator",
     "Encoder",
+    "Generator",
     "VAE",
 ]

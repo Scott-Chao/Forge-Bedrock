@@ -20,7 +20,8 @@ forge-bedrock/
 │   ├── nn/       # Neural network modules (layers, loss, optim, clip, lr_scheduler, regularizer)
 │   ├── prob/     # Probability, info theory, bias-variance decomposition
 │   ├── transformer/  # Transformer building blocks (attention, GPT, BPE, GQA, MoE) — Phase 5–6
-│   └── cv/       # Computer vision (Conv2d, Pooling, BatchNorm2d, ResNet, U-Net, ViT) — Phase 7
+│   ├── cv/       # Computer vision (Conv2d, Pooling, BatchNorm2d, ResNet, U-Net, ViT) — Phase 7
+│   └── gen/      # Generative models (VAE, GAN, Diffusion) — Phase 8
 ├── apps/         # Jupyter notebooks demonstrating each component
 ├── tests/        # pytest tests mirroring core/ structure
 └── assets/       # Static resources (images, etc.)
