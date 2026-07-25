@@ -6,7 +6,12 @@ TimeEmbedding / SinusoidalPosEmbedding (shapes, determinism, MLP).
 
 import pytest
 import torch
-from core.gen import NoiseScheduler, SinusoidalPosEmbedding, TimeEmbedding
+from core.gen import (
+    NoiseScheduler,
+    SinusoidalPosEmbedding,
+    TimeConditionedUNet,
+    TimeEmbedding,
+)
 
 # ============================================================================
 # NoiseScheduler — Schedule Properties
@@ -246,3 +251,155 @@ class TestSinusoidalPosEmbedding:
         emb = spe(t)
         # dim=8, half=4 → sin[0..3], cos[0..3] stacked → 8
         assert emb.shape == (1, 8)
+
+
+# ============================================================================
+# TimeConditionedUNet — Output shape, gradient flow, time sensitivity
+# ============================================================================
+
+
+class TestTimeConditionedUNet:
+    """DDPM-style U-Net with FiLM time conditioning."""
+
+    @pytest.mark.parametrize(
+        "B,C,H,W,depth,base_ch",
+        [
+            (2, 1, 28, 28, 3, 32),  # MNIST, smaller base_ch
+            (4, 1, 32, 32, 3, 64),  # square, standard
+            (1, 3, 32, 32, 3, 32),  # RGB, shallow
+        ],
+    )
+    def test_output_shape(self, B, C, H, W, depth, base_ch):
+        """(B,C,H,W) + (B,) timesteps → (B,C,H,W) noise prediction."""
+        unet = TimeConditionedUNet(
+            in_channels=C,
+            out_channels=C,
+            base_channels=base_ch,
+            depth=depth,
+        )
+        x = torch.randn(B, C, H, W)
+        t = torch.randint(0, 1000, (B,))
+        out = unet(x, t)
+        assert out.shape == (B, C, H, W)
+
+    def test_output_same_spatial_resolution(self):
+        """Output has same H,W as input across different sizes."""
+        for H in [28, 32, 64]:
+            unet = TimeConditionedUNet(
+                in_channels=1,
+                out_channels=1,
+                base_channels=32,
+                depth=3,
+            )
+            x = torch.randn(2, 1, H, H)
+            t = torch.randint(0, 1000, (2,))
+            out = unet(x, t)
+            assert out.shape[-2:] == (H, H), f"spatial mismatch for {H}x{H}"
+
+    def test_different_t_different_output(self):
+        """Different timesteps produce measurably different predictions,
+        even for the same noisy input — proves time conditioning works."""
+        unet = TimeConditionedUNet(
+            in_channels=1,
+            out_channels=1,
+            base_channels=32,
+        )
+        x = torch.randn(4, 1, 28, 28)
+
+        # Same x, two different t sets
+        t_a = torch.full((4,), 10, dtype=torch.long)
+        t_b = torch.full((4,), 999, dtype=torch.long)
+
+        with torch.no_grad():
+            out_a = unet(x, t_a)
+            out_b = unet(x, t_b)
+
+        diff = (out_a - out_b).abs().mean().item()
+        assert diff > 1e-4, f"t=10 and t=999 predictions should differ, diff={diff:.6f}"
+
+    def test_gradient_flows_through_all_params(self):
+        """Backward from output reaches every trainable parameter."""
+        unet = TimeConditionedUNet(
+            in_channels=1,
+            out_channels=1,
+            base_channels=32,
+        )
+        x = torch.randn(2, 1, 28, 28)
+        t = torch.randint(0, 1000, (2,))
+        out = unet(x, t)
+        loss = out.mean()
+        loss.backward()
+
+        no_grad = [name for name, p in unet.named_parameters() if p.grad is None]
+        assert len(no_grad) == 0, f"params with no gradient: {no_grad[:5]}"
+
+    def test_multiple_timesteps_per_batch(self):
+        """Each sample in the batch can have its own timestep."""
+        unet = TimeConditionedUNet(
+            in_channels=1,
+            out_channels=1,
+            base_channels=32,
+        )
+        x = torch.randn(4, 1, 28, 28)
+        t = torch.tensor([0, 100, 500, 999], dtype=torch.long)
+        out = unet(x, t)
+        assert out.shape == (4, 1, 28, 28)
+
+    def test_depth_variation(self):
+        """Changing depth produces valid outputs (2, 3, or 4 stages)."""
+        for depth in [2, 3]:
+            unet = TimeConditionedUNet(
+                in_channels=1,
+                out_channels=1,
+                base_channels=32,
+                depth=depth,
+            )
+            min_size = 28
+            H = W = max(min_size, 2**depth * 4)  # ensure divisibility
+            x = torch.randn(2, 1, H, W)
+            t = torch.randint(0, 1000, (2,))
+            out = unet(x, t)
+            assert out.shape == (2, 1, H, W), f"depth={depth} failed"
+
+    @pytest.mark.parametrize("time_dim", [64, 128, 256])
+    def test_time_dim_variation(self, time_dim):
+        """Varying time_dim works with default architecture."""
+        unet = TimeConditionedUNet(
+            in_channels=1,
+            out_channels=1,
+            base_channels=32,
+            time_dim=time_dim,
+        )
+        x = torch.randn(2, 1, 28, 28)
+        t = torch.randint(0, 1000, (2,), dtype=torch.long)
+        out = unet(x, t)
+        assert out.shape == (2, 1, 28, 28)
+
+    def test_batch_size_one(self):
+        """Batch size 1 (single image) works correctly."""
+        unet = TimeConditionedUNet(
+            in_channels=1,
+            out_channels=1,
+            base_channels=32,
+        )
+        x = torch.randn(1, 1, 28, 28)
+        t = torch.tensor([500])
+        out = unet(x, t)
+        assert out.shape == (1, 1, 28, 28)
+
+    def test_forward_pass_is_deterministic(self):
+        """Same input + same t + same seed → same output."""
+        unet = TimeConditionedUNet(
+            in_channels=1,
+            out_channels=1,
+            base_channels=32,
+        )
+        unet.eval()
+        x = torch.randn(2, 1, 28, 28)
+        t = torch.randint(0, 1000, (2,), dtype=torch.long)
+
+        with torch.no_grad():
+            out_a = unet(x, t)
+            out_b = unet(x, t)
+
+        assert torch.allclose(out_a, out_b, atol=1e-6)

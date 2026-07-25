@@ -161,3 +161,178 @@ class SinusoidalPosEmbedding(nn.Module):
         angles = t_float * self.freqs.unsqueeze(0)
         sin, cos = torch.sin(angles), torch.cos(angles)
         return torch.stack([sin, cos], dim=-1).flatten(-2)
+
+
+# ============================================================================
+# Helpers for TimeConditionedUNet
+# ============================================================================
+
+
+def _film(h: torch.Tensor, gamma_beta: torch.Tensor) -> torch.Tensor:
+    """Apply FiLM modulation: γ · h + β."""
+    gamma, beta = gamma_beta.chunk(2, dim=-1)
+    gamma = gamma.unsqueeze(-1).unsqueeze(-1)
+    beta = beta.unsqueeze(-1).unsqueeze(-1)
+    return gamma * h + beta
+
+
+class _Block(nn.Module):
+    """Single conv block with time conditioning: Conv → GN → SiLU → FiLM."""
+
+    def __init__(
+        self, in_channels: int, out_channels: int, time_dim: int, stride: int = 1
+    ):
+        super().__init__()
+        self.conv = nn.Conv2d(
+            in_channels, out_channels, 3, stride=stride, padding=1, bias=False
+        )
+        self.norm = nn.GroupNorm(min(32, out_channels), out_channels)
+        self.film = nn.Linear(time_dim, out_channels * 2)
+
+    def forward(self, h: torch.Tensor, t_emb: torch.Tensor) -> torch.Tensor:
+        h = self.conv(h)
+        h = self.norm(h)
+        h = torch.nn.functional.silu(h)
+        h = _film(h, self.film(t_emb))
+        return h
+
+
+class _EncoderStage(nn.Module):
+    """One encoder stage: two conv blocks, second with stride-2 downsampling.
+
+    Stores skip feature (output of block 1) before downsampling.
+    """
+
+    def __init__(self, in_channels: int, out_channels: int, time_dim: int):
+        super().__init__()
+        self.block1 = _Block(in_channels, out_channels, time_dim, stride=1)
+        self.block2 = _Block(out_channels, out_channels, time_dim, stride=2)
+
+    def forward(
+        self, h: torch.Tensor, t_emb: torch.Tensor, skips: list[torch.Tensor]
+    ) -> torch.Tensor:
+        h = self.block1(h, t_emb)
+        skips.append(h)
+        h = self.block2(h, t_emb)
+        return h
+
+
+class _DecoderStage(nn.Module):
+    """One decoder stage: upsample → concat skip → conv block."""
+
+    def __init__(self, in_channels: int, out_channels: int, time_dim: int):
+        super().__init__()
+        self.conv_block = _Block(in_channels, out_channels, time_dim)
+
+    def forward(
+        self, h: torch.Tensor, skip: torch.Tensor, t_emb: torch.Tensor
+    ) -> torch.Tensor:
+        h = nn.functional.interpolate(h, scale_factor=2.0, mode="nearest")
+        if h.shape[-1] != skip.shape[-1]:
+            h = nn.functional.interpolate(h, size=skip.shape[-2:], mode="nearest")
+        h = torch.cat([skip, h], dim=1)
+        return self.conv_block(h, t_emb)
+
+
+class TimeConditionedUNet(nn.Module):
+    """U-Net with time-step conditioning via FiLM (scale/shift modulation).
+
+    DDPM-style U-Net for MNIST (28×28):
+        Encoder: 3 stages (64 → 128 → 256, stride-2 downsampling)
+        Bottleneck: 256 → 256
+        Decoder: 3 stages (256+skip → 128+skip → 64, upsample + concat)
+        Output: 64 → out_channels
+
+    At every conv block, time is injected via FiLM:
+        γ(t) · h + β(t)
+    where γ, β are predicted from the time embedding by per-stage MLPs.
+
+    Uses GroupNorm + SiLU (DDPM convention) instead of BN + ReLU.
+
+    Parameters
+    ----------
+    in_channels : int
+        Input image channels (1 for grayscale).
+    out_channels : int
+        Output channels (same as in_channels for noise prediction).
+    base_channels : int
+        Channels at the first encoder stage (doubles each stage).
+    depth : int
+        Number of encoder/decoder stages.
+    time_dim : int
+        Time embedding dimension.
+    """
+
+    def __init__(
+        self,
+        in_channels: int = 1,
+        out_channels: int = 1,
+        base_channels: int = 64,
+        depth: int = 3,
+        time_dim: int = 256,
+    ):
+        super().__init__()
+        self.depth = depth
+        self.base_channels = base_channels
+        self.time_dim = time_dim
+
+        self.time_embed = SinusoidalPosEmbedding(time_dim)
+        self.time_mlp = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(time_dim, time_dim),
+        )
+
+        # ── Encoder ─────────────────────────────────────────────────
+        self.encoder = nn.ModuleList()
+        in_ch = in_channels
+        for level in range(depth):
+            out_ch = base_channels * (2**level)
+            self.encoder.append(_EncoderStage(in_ch, out_ch, time_dim))
+            in_ch = out_ch
+
+        # ── Bottleneck ──────────────────────────────────────────────
+        b_ch = base_channels * (2 ** (depth - 1))
+        self.bottleneck = nn.ModuleList(
+            [_Block(b_ch, b_ch, time_dim) for _ in range(2)]
+        )
+
+        # ── Decoder ─────────────────────────────────────────────────
+        self.decoder = nn.ModuleList()
+        for level in range(depth - 1, -1, -1):
+            skip_ch = base_channels * (2**level)
+            prev_ch = b_ch if level == depth - 1 else base_channels * (2 ** (level + 1))
+            conv_in = prev_ch + skip_ch
+            conv_out = skip_ch if level > 0 else base_channels
+            self.decoder.append(_DecoderStage(conv_in, conv_out, time_dim))
+
+        # ── Output ──────────────────────────────────────────────────
+        self.out_conv = nn.Conv2d(base_channels, out_channels, 3, padding=1)
+
+    def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+        """Predict noise given noisy image and timestep.
+
+        Args:
+            x: noised image   (batch, in_channels, H, W)
+            t: timestep       (batch,)
+
+        Returns:
+            out: predicted noise (batch, out_channels, H, W)
+        """
+        t_emb = self.time_mlp(self.time_embed(t))
+
+        # ── Encoder ─────────────────────────────────────────────────
+        skips = []
+        h = x
+        for stage in self.encoder:
+            h = stage(h, t_emb, skips)
+
+        # ── Bottleneck ──────────────────────────────────────────────
+        for block in self.bottleneck:
+            h = block(h, t_emb)
+
+        # ── Decoder ─────────────────────────────────────────────────
+        for stage in self.decoder:
+            skip = skips.pop()
+            h = stage(h, skip, t_emb)
+
+        return self.out_conv(h)
