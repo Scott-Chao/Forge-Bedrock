@@ -159,7 +159,7 @@ Three generative paradigms on Phase 7's Conv/ConvTranspose backbone: latent-vari
     - [x] `Discriminator`: image $\to$ Conv2d downsamples $\to$ real/fake logit
     - [x] Notebook: loss curves, mode collapse observation, G vs D dynamic
 - [ ] **Diffusion Models** — denoising diffusion probabilistic models
-    - [ ] Building blocks: `NoiseScheduler` (linear $\beta$ schedule, $\bar{\alpha}_t$) + `TimeEmbedding` (sinusoidal encoding for step $t$)
+    - [x] Building blocks: `NoiseScheduler` (linear $\beta$ schedule, $\bar{\alpha}_t$) + `TimeEmbedding` (sinusoidal encoding for step $t$)
     - [ ] `TimeConditionedUNet`: Phase 7's U-Net + time-step conditioning (scale/shift modulation)
     - [ ] DDPM training: $\mathcal{L}_{\text{simple}} = \mathbb{E}_{t,x_0,\epsilon}[\|\epsilon - \epsilon_\theta(x_t, t)\|^2]$
     - [ ] DDPM sampling: $x_T \sim \mathcal{N}(0, I) \to x_{T-1} \to \dots \to x_0$
