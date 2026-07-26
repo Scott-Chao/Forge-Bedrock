@@ -17,6 +17,17 @@ import math
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+
+
+def _extend_to_spatial(t: torch.Tensor, ref: torch.Tensor) -> torch.Tensor:
+    """Expand (batch,) → (batch, 1, 1, 1) for spatial broadcasting.
+
+    ``ref`` provides the target number of spatial dimensions:
+        _extend_to_spatial(t, x_t)  where x_t.shape == (B, C, H, W)
+        → t.view(B, 1, 1, 1)
+    """
+    return t.view(-1, *([1] * (ref.dim() - 1)))
 
 
 class NoiseScheduler(nn.Module):
@@ -69,6 +80,10 @@ class NoiseScheduler(nn.Module):
             "posterior_variance",
             beta * (1.0 - alpha_bar_prev) / (1.0 - alpha_bar),
         )
+        self.register_buffer(
+            "sqrt_posterior_variance",
+            (beta * (1.0 - alpha_bar_prev) / (1.0 - alpha_bar)).sqrt(),
+        )
 
     def add_noise(
         self, x_0: torch.Tensor, t: torch.Tensor
@@ -84,10 +99,8 @@ class NoiseScheduler(nn.Module):
             ε:   the Gaussian noise added    (same shape as x_0)
         """
         eps = torch.randn_like(x_0)
-        signal_scale = self.sqrt_alpha_bar[t].view(-1, *([1] * (x_0.dim() - 1)))
-        noise_scale = self.sqrt_one_minus_alpha_bar[t].view(
-            -1, *([1] * (x_0.dim() - 1))
-        )
+        signal_scale = _extend_to_spatial(self.sqrt_alpha_bar[t], x_0)
+        noise_scale = _extend_to_spatial(self.sqrt_one_minus_alpha_bar[t], x_0)
         x_t = signal_scale * x_0 + noise_scale * eps
         return x_t, eps
 
@@ -192,7 +205,7 @@ class _Block(nn.Module):
     def forward(self, h: torch.Tensor, t_emb: torch.Tensor) -> torch.Tensor:
         h = self.conv(h)
         h = self.norm(h)
-        h = torch.nn.functional.silu(h)
+        h = F.silu(h)
         h = _film(h, self.film(t_emb))
         return h
 
@@ -227,9 +240,9 @@ class _DecoderStage(nn.Module):
     def forward(
         self, h: torch.Tensor, skip: torch.Tensor, t_emb: torch.Tensor
     ) -> torch.Tensor:
-        h = nn.functional.interpolate(h, scale_factor=2.0, mode="nearest")
+        h = F.interpolate(h, scale_factor=2.0, mode="nearest")
         if h.shape[-1] != skip.shape[-1]:
-            h = nn.functional.interpolate(h, size=skip.shape[-2:], mode="nearest")
+            h = F.interpolate(h, size=skip.shape[-2:], mode="nearest")
         h = torch.cat([skip, h], dim=1)
         return self.conv_block(h, t_emb)
 
@@ -336,3 +349,112 @@ class TimeConditionedUNet(nn.Module):
             h = stage(h, skip, t_emb)
 
         return self.out_conv(h)
+
+
+# ============================================================================
+# DDPM — training and sampling orchestration
+# ============================================================================
+
+
+class DDPM(nn.Module):
+    """Denoising Diffusion Probabilistic Model.
+
+    Wraps a NoiseScheduler + TimeConditionedUNet into a single module
+    that provides:
+
+        compute_loss(x_0)
+            Random t, random ε → xₜ → predict ε̂ → MSE(ε̂, ε)
+
+        sample(batch_size, img_size)
+            Reverse diffusion chain: x_T → x_{T-1} → ... → x₀
+
+    Usage
+    -----
+        scheduler = NoiseScheduler(timesteps=1000)
+        unet = TimeConditionedUNet(in_channels=1, out_channels=1)
+        ddpm = DDPM(scheduler, unet)
+
+        # Training step
+        loss = ddpm.compute_loss(x_0)
+        loss.backward()
+
+        # Sampling (once trained)
+        samples = ddpm.sample(batch_size=16, img_size=28)
+    """
+
+    def __init__(self, scheduler: NoiseScheduler, unet: TimeConditionedUNet):
+        super().__init__()
+        self.scheduler = scheduler
+        self.unet = unet
+
+    def compute_loss(self, x_0: torch.Tensor) -> torch.Tensor:
+        """Compute the DDPM training loss for a batch of clean images.
+
+        Args:
+            x_0: clean images  (batch, channels, H, W)  — values in [0, 1]
+
+        Returns:
+            loss: scalar MSE between predicted and true noise
+        """
+        batch_size = x_0.size(0)
+        device = x_0.device
+        t = torch.randint(0, self.scheduler.timesteps, (batch_size,), device=device)
+        x_t, noise = self.scheduler.add_noise(x_0, t)
+        noise_pred = self.unet(x_t, t)
+        loss = F.mse_loss(noise_pred, noise)
+        return loss
+
+    @torch.no_grad()
+    def sample(
+        self, batch_size: int, img_size: int = 28, channels: int = 1
+    ) -> torch.Tensor:
+        """Generate images by reverse diffusion.
+
+        Args:
+            batch_size: number of images to generate
+            img_size:   spatial size H = W
+            channels:   number of image channels
+
+        Returns:
+            x_0: generated images  (batch, channels, img_size, img_size)
+                 Values in same range as training data.
+        """
+        device = next(self.unet.parameters()).device
+        x_t = torch.randn(batch_size, channels, img_size, img_size, device=device)
+        for t in range(self.scheduler.timesteps - 1, -1, -1):
+            t_batch = torch.full((batch_size,), t, device=device)
+            noise_pred = self.unet(x_t, t_batch)
+            x_t = self._reverse_step(x_t, t_batch, noise_pred)
+        return x_t
+
+    def _reverse_step(
+        self, x_t: torch.Tensor, t: torch.Tensor, noise_pred: torch.Tensor
+    ) -> torch.Tensor:
+        """Single reverse diffusion step: x_t → x_{t-1}.
+
+        DDPM reverse step (Algorithm 2):
+            μ_θ = (1/√αₜ) · (x_t - βₜ/√(1-ᾱₜ) · ε_θ)
+            x_{t-1} = μ_θ + σₜ · z,  z ~ N(0, I) if t > 0 else 0
+
+        Args:
+            x_t: current noisy image      (batch, C, H, W)
+            t:   current timestep          (batch,) — in [0, T-1]
+            noise_pred: predicted noise    (batch, C, H, W)
+
+        Returns:
+            x_{t-1}: one step less noisy   (batch, C, H, W)
+        """
+        sqrt_recip_alpha = _extend_to_spatial(self.scheduler.sqrt_recip_alpha[t], x_t)
+        beta = _extend_to_spatial(self.scheduler.beta[t], x_t)
+        sqrt_one_minus_alpha_bar = _extend_to_spatial(
+            self.scheduler.sqrt_one_minus_alpha_bar[t], x_t
+        )
+        sigma = _extend_to_spatial(self.scheduler.sqrt_posterior_variance[t], x_t)
+
+        mu = sqrt_recip_alpha * (x_t - beta / sqrt_one_minus_alpha_bar * noise_pred)
+
+        if t[0].item() > 0:
+            z = torch.randn_like(x_t)
+        else:
+            z = 0.0
+        return mu + sigma * z

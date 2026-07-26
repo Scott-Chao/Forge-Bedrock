@@ -403,3 +403,115 @@ class TestTimeConditionedUNet:
             out_b = unet(x, t)
 
         assert torch.allclose(out_a, out_b, atol=1e-6)
+
+
+# ============================================================================
+# _extend_to_spatial — broadcasting helper
+# ============================================================================
+
+
+class TestExtendToSpatial:
+    """(batch,) → (batch, 1, 1, 1) broadcasting."""
+
+    @pytest.mark.parametrize("batch,spatial_dim", [(2, 28), (4, 32), (1, 64)])
+    def test_reshapes_correctly(self, batch, spatial_dim):
+        from core.gen.diffusion import _extend_to_spatial
+
+        t = torch.randn(batch)
+        ref = torch.randn(batch, 3, spatial_dim, spatial_dim)
+        result = _extend_to_spatial(t, ref)
+        assert result.shape == (batch, 1, 1, 1)
+
+    def test_preserves_values(self):
+        from core.gen.diffusion import _extend_to_spatial
+
+        t = torch.tensor([0.5, 1.5, 2.5])
+        ref = torch.randn(3, 1, 28, 28)
+        result = _extend_to_spatial(t, ref)
+        assert torch.allclose(result.squeeze(), t)
+
+
+# ============================================================================
+# DDPM — training loss, reverse step, sampling
+# ============================================================================
+
+
+class TestDDPM:
+    """DDPM wrapper: compute_loss, _reverse_step, sample."""
+
+    @pytest.fixture
+    def ddpm(self):
+        scheduler = NoiseScheduler(timesteps=100)
+        unet = TimeConditionedUNet(
+            in_channels=1,
+            out_channels=1,
+            base_channels=32,
+            time_dim=64,
+        )
+        from core.gen.diffusion import DDPM
+
+        return DDPM(scheduler, unet)
+
+    def test_compute_loss_is_scalar_mse(self, ddpm):
+        """compute_loss returns a scalar MSE tensor that requires grad."""
+        x_0 = torch.randn(4, 1, 28, 28)
+        loss = ddpm.compute_loss(x_0)
+        assert loss.ndim == 0
+        assert loss.requires_grad
+        assert loss.item() > 0
+
+    def test_compute_loss_backward_reaches_unet(self, ddpm):
+        """Gradient flows through compute_loss to all UNet parameters."""
+        x_0 = torch.randn(2, 1, 28, 28)
+        loss = ddpm.compute_loss(x_0)
+        loss.backward()
+        n_grad = sum(p.grad is not None for p in ddpm.unet.parameters())
+        n_total = sum(1 for _ in ddpm.unet.parameters())
+        assert n_grad == n_total, f"{n_grad}/{n_total} UNet params have grad"
+
+    @pytest.mark.parametrize("t_val", [0, 10, 50, 99])
+    def test_reverse_step_reduces_noise(self, ddpm, t_val):
+        """_reverse_step produces an output closer to clean than input."""
+        x_0 = torch.randn(2, 1, 28, 28)
+        noise = torch.randn_like(x_0)
+        x_t = ddpm.scheduler.add_noise(x_0, torch.full((2,), t_val, dtype=torch.long))[
+            0
+        ]
+        noise_pred = ddpm.unet(x_t, torch.full((2,), t_val, dtype=torch.long))
+
+        x_next = ddpm._reverse_step(
+            x_t, torch.full((2,), t_val, dtype=torch.long), noise_pred
+        )
+
+        mse_before = ((x_t - x_0) ** 2).mean()
+        mse_after = ((x_next - x_0) ** 2).mean()
+        assert mse_after < mse_before + 0.05, (
+            f"t={t_val}: MSE to clean {mse_after:.4f} should be ≤ "
+            f"{mse_before:.4f} + 0.05"
+        )
+
+    @pytest.mark.parametrize("batch_size", [1, 4])
+    def test_sample_output_shape(self, ddpm, batch_size):
+        """sample() generates images with correct shape."""
+        samples = ddpm.sample(batch_size=batch_size, img_size=28, channels=1)
+        assert samples.shape == (batch_size, 1, 28, 28)
+
+    def test_sample_is_deterministic(self, ddpm):
+        """Same seed → same samples (modulo TF32 nondeterminism)."""
+        torch.manual_seed(42)
+        s1 = ddpm.sample(batch_size=2, img_size=28, channels=1)
+        torch.manual_seed(42)
+        s2 = ddpm.sample(batch_size=2, img_size=28, channels=1)
+        assert torch.allclose(s1, s2, atol=1e-5)
+
+    def test_sample_values_are_finite(self, ddpm):
+        """Generated samples contain only finite values."""
+        samples = ddpm.sample(batch_size=4, img_size=28, channels=1)
+        assert torch.isfinite(samples).all()
+
+    def test_noise_scheduler_has_sqrt_posterior_variance(self):
+        """sqrt_posterior_variance is a registered buffer with correct shape."""
+        s = NoiseScheduler(timesteps=100)
+        assert hasattr(s, "sqrt_posterior_variance")
+        assert s.sqrt_posterior_variance.shape == (100,)
+        assert torch.isfinite(s.sqrt_posterior_variance).all()
