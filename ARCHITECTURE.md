@@ -51,24 +51,36 @@ forge-bedrock/
 │   ├── unet.py            # U-Net: DownBlock, UpBlock, UNet (skip connections)
 │   └── vit.py             # ViT: PatchEmbed, ViTBlock, ViT (patches + transformer)
 ├── core/gen/              # Generative Models on PyTorch (Phase 8)
-│   ├── __init__.py        # Exports Encoder, Decoder, VAE
-│   └── vae.py             # VAE: Encoder → Reparameterize → Decoder, ELBO loss
-├── apps/                  # Application Jupyter Notebooks
-│   ├── image_compression.ipynb        # SVD-based low-rank image compression
-│   ├── least_squares_regression.ipynb # Normal Equation vs Pseudoinverse
-│   ├── mlp_regression.ipynb           # 2-layer MLP fitting sin(x) from scratch
-│   ├── binary_classification_moons.ipynb    # Moons dataset with BCE loss
-│   ├── multiclass_classification_blobs.ipynb # Synthetic blobs + CrossEntropy
-│   ├── compare_losses_regression.ipynb      # MSE vs L1 vs Huber on outliers
-│   ├── bias_variance_tradeoff.ipynb         # Bias-variance decomposition demo
-│   ├── pdf_pmf_visualization.ipynb          # Distribution visualisation
-│   ├── toy_loss_surface_comparison.ipynb    # Beale & Rosenbrock with 7 optimisers
-│   ├── optimiser_comparison_classifier.ipynb # SGD vs Momentum vs Adam on moons
-│   ├── train_gpt.ipynb                 # Full training pipeline on TinyShakespeare
-│   ├── analysis_attention_rope.ipynb   # Attention pattern heatmaps + RoPE visualisation
-│   ├── analysis_moe_routing.ipynb      # MoE expert activation heatmaps & routing entropy
-│   ├── analysis_sampling.ipynb         # Temperature, Top-k, Top-p sampling comparison
-│   └── vit_cifar10.ipynb              # ViT training on CIFAR-10 with cosine LR schedule
+│   ├── __init__.py        # Exports all gen models
+│   ├── vae.py             # VAE: Encoder → Reparameterize → Decoder, ELBO loss
+│   ├── gan.py             # GAN: Generator (ConvTranspose2d) + Discriminator (Conv2d)
+│   └── diffusion.py       # DDPM/DDIM: NoiseScheduler, TimeConditionedUNet, DDPM, DDIM
+├── apps/                  # Application Jupyter Notebooks (organised by topic)
+│   ├── linalg/            # Phase 1 — Linear algebra demos
+│   │   ├── image_compression.ipynb
+│   │   └── least_squares_regression.ipynb
+│   ├── autograd/          # Phase 2 — Autograd demos
+│   │   └── mlp_regression.ipynb
+│   ├── prob/              # Phase 3 — Probability & statistics demos
+│   │   ├── binary_classification_moons.ipynb
+│   │   ├── multiclass_classification_blobs.ipynb
+│   │   ├── compare_losses_regression.ipynb
+│   │   ├── bias_variance_tradeoff.ipynb
+│   │   └── pdf_pmf_visualization.ipynb
+│   ├── optim/             # Phase 4 — Optimisation demos
+│   │   ├── toy_loss_surface_comparison.ipynb
+│   │   └── optimiser_comparison_classifier.ipynb
+│   ├── transformer/       # Phase 5–6 — Transformer demos
+│   │   ├── train_gpt.ipynb
+│   │   ├── analysis_attention_rope.ipynb
+│   │   ├── analysis_moe_routing.ipynb
+│   │   └── analysis_sampling.ipynb
+│   ├── cv/                # Phase 7 — Computer vision demos
+│   │   └── vit_cifar10.ipynb
+│   └── gen/               # Phase 8 — Generative model demos
+│       ├── vae_mnist.ipynb
+│       ├── gan_mnist.ipynb
+│       └── diffusion_mnist.ipynb
 ├── tests/                 # pytest tests mirroring core/ structure
 │   ├── linalg/            # Tests for Phase 1 (matrix, eigen, solver, SVD)
 │   ├── autograd/          # Tests for Phase 2 (value, functional with finite differences)
