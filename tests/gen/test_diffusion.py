@@ -515,3 +515,66 @@ class TestDDPM:
         assert hasattr(s, "sqrt_posterior_variance")
         assert s.sqrt_posterior_variance.shape == (100,)
         assert torch.isfinite(s.sqrt_posterior_variance).all()
+
+
+# ============================================================================
+# DDIM — deterministic, accelerated sampling
+# ============================================================================
+
+
+class TestDDIM:
+    """DDIM core: predict-x₀, deterministic reverse, skip-step."""
+
+    @pytest.fixture
+    def ddim(self):
+        scheduler = NoiseScheduler(timesteps=100)
+        unet = TimeConditionedUNet(
+            in_channels=1, out_channels=1, base_channels=32, time_dim=64
+        )
+        from core.gen.diffusion import DDIM
+
+        return DDIM(scheduler, unet)
+
+    def test_predict_x0_recovers_clean_when_eps_is_perfect(self, ddim):
+        """If noise_pred == true noise, pred_x0 should be near x_0 (core formula)."""
+        x_0 = torch.randn(4, 1, 28, 28)
+        t = torch.randint(0, 100, (4,))
+        x_t, true_noise = ddim.scheduler.add_noise(x_0, t)
+        pred_x0, eps = ddim._predict_x0_and_eps(x_t, t, true_noise)
+        assert pred_x0.shape == x_t.shape
+        assert eps.shape == x_t.shape
+        assert ((pred_x0 - x_0) ** 2).mean().item() < 0.01
+
+    @pytest.mark.parametrize("t_val", [10, 99])
+    def test_reverse_step_reduces_noise(self, ddim, t_val):
+        """DDIM deterministic step moves x_t closer to clean x_0."""
+        x_0 = torch.randn(2, 1, 28, 28)
+        t_batch = torch.full((2,), t_val, dtype=torch.long)
+        x_t, _ = ddim.scheduler.add_noise(x_0, t_batch)
+        noise_pred = ddim.unet(x_t, t_batch)
+        x_next = ddim._reverse_step(x_t, t_batch, noise_pred)
+        mse_before = ((x_t - x_0) ** 2).mean()
+        mse_after = ((x_next - x_0) ** 2).mean()
+        assert mse_after < mse_before + 0.05
+
+    def test_skip_step_works(self, ddim):
+        """DDIM can jump more than one step (50→20) without crash."""
+        x_t = torch.randn(2, 1, 28, 28)
+        noise_pred = torch.randn_like(x_t)
+        x_next = ddim._reverse_step(
+            x_t,
+            torch.full((2,), 50, dtype=torch.long),
+            noise_pred,
+            step_t=torch.full((2,), 20, dtype=torch.long),
+        )
+        assert x_next.shape == x_t.shape
+
+    def test_sample_deterministic_and_shapes(self, ddim):
+        """DDIM is deterministic; output shape correct for various step counts."""
+        for num_steps in [10, 50]:
+            torch.manual_seed(42)
+            s1 = ddim.sample(batch_size=2, img_size=28, channels=1, num_steps=num_steps)
+            torch.manual_seed(42)
+            s2 = ddim.sample(batch_size=2, img_size=28, channels=1, num_steps=num_steps)
+            assert s1.shape == (2, 1, 28, 28)
+            assert torch.allclose(s1, s2, atol=1e-5)

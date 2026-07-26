@@ -12,6 +12,7 @@ core/cv (Conv2d, ConvTranspose2d, etc.) where appropriate.
 """
 
 from .diffusion import (
+    DDIM,
     DDPM,
     NoiseScheduler,
     SinusoidalPosEmbedding,
@@ -22,6 +23,7 @@ from .gan import Discriminator, Generator
 from .vae import VAE, Decoder, Encoder
 
 __all__ = [
+    "DDIM",
     "DDPM",
     "Decoder",
     "Discriminator",

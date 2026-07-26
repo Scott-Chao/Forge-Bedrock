@@ -458,3 +458,136 @@ class DDPM(nn.Module):
         else:
             z = 0.0
         return mu + sigma * z
+
+
+# ============================================================================
+# DDIM — deterministic sampling with skip-step acceleration
+# ============================================================================
+
+
+class DDIM(DDPM):
+    """Denoising Diffusion Implicit Model — deterministic, accelerated sampling.
+
+    DDIM modifies DDPM's **reverse step** to be deterministic (σ_t = 0)
+    and supports **skip-step sampling** — running only S << T steps.
+
+    The reverse step uses the **predicted-x₀ formulation**:
+        x̂₀    = (x_t - √(1 - ᾱₜ) · ε_θ) / √ᾱₜ
+        x_{t-1} = √ᾱ_{t-1} · x̂₀ + √(1 - ᾱ_{t-1}) · ε_θ
+
+    This is equivalent to the DDPM step with σ_t = 0 — no random noise.
+
+    Training is **identical** to DDPM (same compute_loss inherited).
+    Only the sampling path changes.
+
+    Usage
+    -----
+        scheduler = NoiseScheduler(timesteps=1000)
+        unet = TimeConditionedUNet(...)
+        ddim = DDIM(scheduler, unet)
+
+        # Same training
+        loss = ddim.compute_loss(x_0)      # inherited from DDPM
+
+        # 100-step accelerated sampling (10× faster than full DDPM)
+        samples = ddim.sample(16, img_size=28, num_steps=100)
+    """
+
+    def _predict_x0_and_eps(
+        self, x_t: torch.Tensor, t: torch.Tensor, noise_pred: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Predict x₀ (clean image) and ε from a single U-Net output.
+
+        Given x_t = √ᾱₜ · x₀ + √(1-ᾱₜ) · ε and U-Net's prediction
+        ε_θ ≈ ε, we can "decode" x₀ in one step:
+
+            x̂₀ = (x_t - √(1 - ᾱₜ) · ε_θ) / √ᾱₜ
+
+        Args:
+            x_t: noisy image at timestep t
+            t:   timestep indices  (batch,)
+            noise_pred: U-Net prediction ε_θ
+
+        Returns:
+            pred_x0: predicted clean image  (same shape as x_t)
+            eps:     predicted noise         (same shape — alias for
+                     noise_pred, returned for convenience)
+        """
+        sqrt_alpha_bar = _extend_to_spatial(self.scheduler.sqrt_alpha_bar[t], x_t)
+        sqrt_one_minus_alpha_bar = _extend_to_spatial(
+            self.scheduler.sqrt_one_minus_alpha_bar[t], x_t
+        )
+        pred_x0 = (x_t - sqrt_one_minus_alpha_bar * noise_pred) / sqrt_alpha_bar
+        return pred_x0, noise_pred
+
+    def _reverse_step(
+        self,
+        x_t: torch.Tensor,
+        t: torch.Tensor,
+        noise_pred: torch.Tensor,
+        step_t: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """DDIM reverse step: deterministic x_t → x_{t-1}.
+
+        Uses the predicted-x₀ formulation with σ_t = 0:
+            x_{t-1} = √ᾱ_{t-1} · x̂₀ + √(1 - ᾱ_{t-1}) · ε_θ
+
+        Args:
+            x_t: noisy image at current timestep t
+            t:   current timestep indices  (batch,)
+            noise_pred: U-Net's noise prediction
+            step_t: timestep to step **to** (default: t-1).
+                    Used when skipping steps — step_t < t-1.
+
+        Returns:
+            x_{step_t}: less noisy image
+        """
+        pred_x0, eps = self._predict_x0_and_eps(x_t, t, noise_pred)
+        target_t = step_t if step_t is not None else t - 1
+
+        sqrt_alpha_bar = _extend_to_spatial(
+            self.scheduler.sqrt_alpha_bar[target_t], x_t
+        )
+        sqrt_one_minus_alpha_bar = _extend_to_spatial(
+            self.scheduler.sqrt_one_minus_alpha_bar[target_t], x_t
+        )
+        return sqrt_alpha_bar * pred_x0 + sqrt_one_minus_alpha_bar * eps
+
+    @torch.no_grad()
+    def sample(
+        self,
+        batch_size: int,
+        img_size: int = 28,
+        channels: int = 1,
+        num_steps: int = 50,
+    ) -> torch.Tensor:
+        """Generate images with skip-step DDIM sampling.
+
+        Instead of running T steps, run only ``num_steps`` steps by
+        skipping through the reverse diffusion chain.
+
+        Args:
+            batch_size: number of images to generate
+            img_size:   spatial size H = W
+            channels:   number of image channels
+            num_steps:  number of reverse steps (S << T).
+                        DDPM default: 1000.  DDIM can use 50-100.
+
+        Returns:
+            x_0: generated images  (batch, channels, img_size, img_size)
+        """
+        device = next(self.unet.parameters()).device
+        timesteps = torch.linspace(
+            self.scheduler.timesteps - 1, 0, num_steps, dtype=torch.long, device=device
+        )
+        x_t = torch.randn(batch_size, channels, img_size, img_size, device=device)
+
+        for i in range(len(timesteps) - 1):
+            curr = timesteps[i]
+            next_t = timesteps[i + 1]
+
+            t_batch = torch.full((batch_size,), curr.item(), device=device)
+            noise_pred = self.unet(x_t, t_batch)
+            x_t = self._reverse_step(x_t, t_batch, noise_pred, next_t)
+
+        return x_t
