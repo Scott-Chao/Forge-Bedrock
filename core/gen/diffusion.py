@@ -274,6 +274,9 @@ class TimeConditionedUNet(nn.Module):
         Number of encoder/decoder stages.
     time_dim : int
         Time embedding dimension.
+    num_classes : int, default=0
+        Number of classes for class-conditioned generation.
+        0 = unconditional (no class embedding). 10 for MNIST.
     """
 
     def __init__(
@@ -283,17 +286,22 @@ class TimeConditionedUNet(nn.Module):
         base_channels: int = 64,
         depth: int = 3,
         time_dim: int = 256,
+        num_classes: int = 0,
     ):
         super().__init__()
         self.depth = depth
         self.base_channels = base_channels
         self.time_dim = time_dim
+        self.num_classes = num_classes
 
         self.time_embed = SinusoidalPosEmbedding(time_dim)
         self.time_mlp = nn.Sequential(
             nn.SiLU(),
             nn.Linear(time_dim, time_dim),
         )
+
+        if num_classes > 0:
+            self.class_embed = nn.Embedding(num_classes, time_dim)
 
         # ── Encoder ─────────────────────────────────────────────────
         self.encoder = nn.ModuleList()
@@ -321,17 +329,27 @@ class TimeConditionedUNet(nn.Module):
         # ── Output ──────────────────────────────────────────────────
         self.out_conv = nn.Conv2d(base_channels, out_channels, 3, padding=1)
 
-    def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-        """Predict noise given noisy image and timestep.
+    def forward(
+        self,
+        x: torch.Tensor,
+        t: torch.Tensor,
+        class_labels: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Predict noise given noisy image, timestep, and (optionally) class.
 
         Args:
-            x: noised image   (batch, in_channels, H, W)
-            t: timestep       (batch,)
+            x: noised image       (batch, in_channels, H, W)
+            t: timestep           (batch,)
+            class_labels: optional class indices (batch,) for conditional
+                          generation.  Ignored when num_classes == 0.
 
         Returns:
-            out: predicted noise (batch, out_channels, H, W)
+            out: predicted noise  (batch, out_channels, H, W)
         """
         t_emb = self.time_mlp(self.time_embed(t))
+
+        if self.num_classes > 0 and class_labels is not None:
+            t_emb = t_emb + self.class_embed(class_labels)
 
         # ── Encoder ─────────────────────────────────────────────────
         skips = []
@@ -387,11 +405,15 @@ class DDPM(nn.Module):
         self.scheduler = scheduler
         self.unet = unet
 
-    def compute_loss(self, x_0: torch.Tensor) -> torch.Tensor:
+    def compute_loss(
+        self, x_0: torch.Tensor, class_labels: torch.Tensor | None = None
+    ) -> torch.Tensor:
         """Compute the DDPM training loss for a batch of clean images.
 
         Args:
             x_0: clean images  (batch, channels, H, W)  — values in [0, 1]
+            class_labels: optional class indices (batch,) for
+                          class-conditioned models.
 
         Returns:
             loss: scalar MSE between predicted and true noise
@@ -400,13 +422,17 @@ class DDPM(nn.Module):
         device = x_0.device
         t = torch.randint(0, self.scheduler.timesteps, (batch_size,), device=device)
         x_t, noise = self.scheduler.add_noise(x_0, t)
-        noise_pred = self.unet(x_t, t)
+        noise_pred = self.unet(x_t, t, class_labels)
         loss = F.mse_loss(noise_pred, noise)
         return loss
 
     @torch.no_grad()
     def sample(
-        self, batch_size: int, img_size: int = 28, channels: int = 1
+        self,
+        batch_size: int,
+        img_size: int = 28,
+        channels: int = 1,
+        class_labels: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Generate images by reverse diffusion.
 
@@ -414,6 +440,8 @@ class DDPM(nn.Module):
             batch_size: number of images to generate
             img_size:   spatial size H = W
             channels:   number of image channels
+            class_labels: optional class indices (batch,) for
+                          class-conditioned generation.
 
         Returns:
             x_0: generated images  (batch, channels, img_size, img_size)
@@ -423,7 +451,7 @@ class DDPM(nn.Module):
         x_t = torch.randn(batch_size, channels, img_size, img_size, device=device)
         for t in range(self.scheduler.timesteps - 1, -1, -1):
             t_batch = torch.full((batch_size,), t, device=device)
-            noise_pred = self.unet(x_t, t_batch)
+            noise_pred = self.unet(x_t, t_batch, class_labels)
             x_t = self._reverse_step(x_t, t_batch, noise_pred)
         return x_t
 
@@ -559,6 +587,7 @@ class DDIM(DDPM):
         batch_size: int,
         img_size: int = 28,
         channels: int = 1,
+        class_labels: torch.Tensor | None = None,
         num_steps: int = 50,
     ) -> torch.Tensor:
         """Generate images with skip-step DDIM sampling.
@@ -572,6 +601,8 @@ class DDIM(DDPM):
             channels:   number of image channels
             num_steps:  number of reverse steps (S << T).
                         DDPM default: 1000.  DDIM can use 50-100.
+            class_labels: optional class indices (batch,) for
+                          class-conditioned generation.
 
         Returns:
             x_0: generated images  (batch, channels, img_size, img_size)
@@ -587,7 +618,7 @@ class DDIM(DDPM):
             next_t = timesteps[i + 1]
 
             t_batch = torch.full((batch_size,), curr.item(), device=device)
-            noise_pred = self.unet(x_t, t_batch)
+            noise_pred = self.unet(x_t, t_batch, class_labels)
             x_t = self._reverse_step(x_t, t_batch, noise_pred, next_t)
 
         return x_t

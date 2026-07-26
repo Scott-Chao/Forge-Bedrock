@@ -164,5 +164,5 @@ Three generative paradigms on Phase 7's Conv/ConvTranspose backbone: latent-vari
     - [x] DDPM training: $\mathcal{L}_{\text{simple}} = \mathbb{E}_{t,x_0,\epsilon}[\|\epsilon - \epsilon_\theta(x_t, t)\|^2]$
     - [x] DDPM sampling: $x_T \sim \mathcal{N}(0, I) \to x_{T-1} \to \dots \to x_0$
     - [x] [Extension] DDIM: deterministic sampling, $10\times$+ speedup
-    - [ ] [Extension] Class-conditioned diffusion: inject class embedding $c$ via scale/shift modulation 
+    - [x] [Extension] Class-conditioned diffusion: inject class embedding $c$ via scale/shift modulation 
     - [ ] Notebook: forward noising visualisation, reverse denoising step-by-step, DDPM vs DDIM
